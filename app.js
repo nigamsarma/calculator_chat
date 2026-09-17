@@ -361,51 +361,63 @@
 
   // ---------- Cloudflare WebSocket relay ----------
   async function connectRelay() {
-    if (!CONFIG.WORKER_URL.startsWith("wss://")) {
-      toast("Configure WORKER_URL in app.js");
-      return;
-    }
-    $("connectionState").textContent = "Connecting…";
-    const url = `${CONFIG.WORKER_URL}?user=${encodeURIComponent(volatile.userId)}`;
-    const ws = new WebSocket(url);
-    volatile.ws = ws;
+  if (!volatile.userId) return;
 
-    ws.addEventListener("open", () => {
-      $("connectionState").textContent = "Connected";
-      ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
-    });
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${CONFIG.RELAY_URL.replace(/^http/, "ws")}/?user=${encodeURIComponent(volatile.userId)}`;
 
-    ws.addEventListener("message", async (event) => {
-  try {
-    const data = JSON.parse(event.data);
-
-    // Handle batch of unread messages retrieved from Cloudflare KV
-    if (data.type === "offline" && Array.isArray(data.items)) {
-      for (const item of data.items) {
-        await handleIncomingPacket(item);
-        // Send ACK so Cloudflare KV deletes the delivered message
-        ws.send(JSON.stringify({ type: "ack", messageId: item.messageId }));
-      }
-    }
-
-    // Handle single direct message
-    if (data.type === "message") {
-      await handleIncomingPacket(data);
-      ws.send(JSON.stringify({ type: "ack", messageId: data.messageId }));
-    }
-  } catch (err) {
-    console.error("Message parsing error:", err);
+  if (volatile.ws) {
+    volatile.ws.close();
   }
-});
 
-    ws.addEventListener("close", () => {
-      if (volatile.ws === ws) {
-        $("connectionState").textContent = "Disconnected";
-        volatile.ws = null;
+  const ws = new WebSocket(wsUrl);
+  volatile.ws = ws;
+
+  ws.addEventListener("open", () => {
+    $("connectionState").textContent = "Connected";
+    ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
+
+    // Heartbeat ping every 30 seconds to prevent idle timeout
+    if (volatile.pingInterval) clearInterval(volatile.pingInterval);
+    volatile.pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
       }
-    });
-    ws.addEventListener("error", () => $("connectionState").textContent = "Relay error");
-  }
+    }, 30000);
+  });
+
+  ws.addEventListener("message", async (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === "offline" && Array.isArray(data.items)) {
+        for (const item of data.items) {
+          await handleIncomingPacket(item);
+          ws.send(JSON.stringify({ type: "ack", messageId: item.messageId }));
+        }
+      }
+      if (data.type === "message") {
+        await handleIncomingPacket(data);
+        ws.send(JSON.stringify({ type: "ack", messageId: data.messageId }));
+      }
+    } catch (e) {
+      console.error("Message parse error:", e);
+    }
+  });
+
+  ws.addEventListener("close", () => {
+    $("connectionState").textContent = "Reconnecting...";
+    if (volatile.pingInterval) clearInterval(volatile.pingInterval);
+    
+    // Auto-reconnect after 3 seconds if disconnected by Cloudflare
+    setTimeout(() => {
+      if (volatile.userId) connectRelay();
+    }, 3000);
+  });
+
+  ws.addEventListener("error", () => {
+    ws.close();
+  });
+}
 
   async function handleIncomingPacket(packet) {
   if (!packet || packet.senderId !== volatile.contactId) return;
