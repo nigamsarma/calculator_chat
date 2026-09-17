@@ -376,25 +376,27 @@
     });
 
     ws.addEventListener("message", async (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "message") {
-          await receiveRelayMessage(msg);
-        } else if (msg.type === "offline") {
-          for (const item of msg.items || []) await receiveRelayMessage(item);
-        } else if (msg.type === "ack") {
-          const waiter = volatile.ackWaiters.get(msg.messageId);
-          if (waiter) {
-            waiter.resolve();
-            volatile.ackWaiters.delete(msg.messageId);
-          }
-        } else if (msg.type === "error") {
-          toast(msg.message || "Relay error");
-        }
-      } catch (err) {
-        console.error(err);
+  try {
+    const data = JSON.parse(event.data);
+
+    // Handle batch of unread messages retrieved from Cloudflare KV
+    if (data.type === "offline" && Array.isArray(data.items)) {
+      for (const item of data.items) {
+        await handleIncomingPacket(item);
+        // Send ACK so Cloudflare KV deletes the delivered message
+        ws.send(JSON.stringify({ type: "ack", messageId: item.messageId }));
       }
-    });
+    }
+
+    // Handle single direct message
+    if (data.type === "message") {
+      await handleIncomingPacket(data);
+      ws.send(JSON.stringify({ type: "ack", messageId: data.messageId }));
+    }
+  } catch (err) {
+    console.error("Message parsing error:", err);
+  }
+});
 
     ws.addEventListener("close", () => {
       if (volatile.ws === ws) {
@@ -405,6 +407,27 @@
     ws.addEventListener("error", () => $("connectionState").textContent = "Relay error");
   }
 
+  async function handleIncomingPacket(packet) {
+  if (!packet || packet.senderId !== volatile.contactId) return;
+
+  // Prevent duplicate rendering if message is already in memory
+  if (volatile.history.some(m => m.id === packet.messageId)) return;
+
+  const text = await decryptText(packet.payload);
+  if (!text) return;
+
+  const msgObj = {
+    id: packet.messageId,
+    senderId: packet.senderId,
+    recipientId: packet.recipientId,
+    timestamp: packet.timestamp || Date.now(),
+    text
+  };
+
+  volatile.history.push(msgObj);
+  renderMessage(msgObj);
+  saveHistory();
+}
   async function receiveRelayMessage(msg) {
     if (msg.recipientId && msg.recipientId !== volatile.userId) return;
     try {
