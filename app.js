@@ -361,88 +361,51 @@
 
   // ---------- Cloudflare WebSocket relay ----------
   async function connectRelay() {
-  if (!volatile.userId) {
-    $("connectionState").textContent = "Disconnected";
-    return;
-  }
-
-  // Do not open duplicate sockets if already connecting or active
-  if (volatile.ws && (volatile.ws.readyState === WebSocket.CONNECTING || volatile.ws.readyState === WebSocket.OPEN)) {
-    return;
-  }
-
-  // Detach listeners on old socket instance to prevent ghost callbacks
-  if (volatile.ws) {
-    volatile.ws.onopen = null;
-    volatile.ws.onmessage = null;
-    volatile.ws.onclose = null;
-    volatile.ws.onerror = null;
-    volatile.ws.close();
-    volatile.ws = null;
-  }
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${CONFIG.RELAY_URL.replace(/^http/, "ws")}/?user=${encodeURIComponent(volatile.userId)}`;
-
-  $("connectionState").textContent = "Connecting...";
-
-  try {
-    const ws = new WebSocket(wsUrl);
+    if (!CONFIG.WORKER_URL.startsWith("wss://")) {
+      toast("Configure WORKER_URL in app.js");
+      return;
+    }
+    $("connectionState").textContent = "Connecting…";
+    const url = `${CONFIG.WORKER_URL}?user=${encodeURIComponent(volatile.userId)}`;
+    const ws = new WebSocket(url);
     volatile.ws = ws;
 
-    ws.onopen = () => {
+    ws.addEventListener("open", () => {
       $("connectionState").textContent = "Connected";
       ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
+    });
 
-      // Keep-alive heartbeat ping every 20 seconds
-      if (volatile.pingInterval) clearInterval(volatile.pingInterval);
-      volatile.pingInterval = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
-        }
-      }, 20000);
-    };
+    ws.addEventListener("message", async (event) => {
+  try {
+    const data = JSON.parse(event.data);
 
-    ws.onmessage = async (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "offline" && Array.isArray(data.items)) {
-          for (const item of data.items) {
-            await handleIncomingPacket(item);
-            ws.send(JSON.stringify({ type: "ack", messageId: item.messageId }));
-          }
-        }
-        if (data.type === "message") {
-          await handleIncomingPacket(data);
-          ws.send(JSON.stringify({ type: "ack", messageId: data.messageId }));
-        }
-      } catch (e) {
-        console.error("Message parse error:", e);
+    // Handle batch of unread messages retrieved from Cloudflare KV
+    if (data.type === "offline" && Array.isArray(data.items)) {
+      for (const item of data.items) {
+        await handleIncomingPacket(item);
+        // Send ACK so Cloudflare KV deletes the delivered message
+        ws.send(JSON.stringify({ type: "ack", messageId: item.messageId }));
       }
-    };
+    }
 
-    ws.onclose = () => {
-      if (volatile.pingInterval) clearInterval(volatile.pingInterval);
-      if (volatile.ws === ws) {
-        volatile.ws = null;
-        $("connectionState").textContent = "Disconnected";
-        // Quietly reconnect in 2 seconds
-        setTimeout(() => {
-          if (volatile.userId) connectRelay();
-        }, 2000);
-      }
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
+    // Handle single direct message
+    if (data.type === "message") {
+      await handleIncomingPacket(data);
+      ws.send(JSON.stringify({ type: "ack", messageId: data.messageId }));
+    }
   } catch (err) {
-    $("connectionState").textContent = "Disconnected";
-    setTimeout(() => {
-      if (volatile.userId) connectRelay();
-    }, 3000);
+    console.error("Message parsing error:", err);
   }
-}
+});
+
+    ws.addEventListener("close", () => {
+      if (volatile.ws === ws) {
+        $("connectionState").textContent = "Disconnected";
+        volatile.ws = null;
+      }
+    });
+    ws.addEventListener("error", () => $("connectionState").textContent = "Relay error");
+  }
 
   async function handleIncomingPacket(packet) {
   if (!packet || packet.senderId !== volatile.contactId) return;
