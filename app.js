@@ -361,62 +361,87 @@
 
   // ---------- Cloudflare WebSocket relay ----------
   async function connectRelay() {
-  if (!volatile.userId) return;
+  if (!volatile.userId) {
+    $("connectionState").textContent = "Disconnected";
+    return;
+  }
+
+  // Do not open duplicate sockets if already connecting or active
+  if (volatile.ws && (volatile.ws.readyState === WebSocket.CONNECTING || volatile.ws.readyState === WebSocket.OPEN)) {
+    return;
+  }
+
+  // Detach listeners on old socket instance to prevent ghost callbacks
+  if (volatile.ws) {
+    volatile.ws.onopen = null;
+    volatile.ws.onmessage = null;
+    volatile.ws.onclose = null;
+    volatile.ws.onerror = null;
+    volatile.ws.close();
+    volatile.ws = null;
+  }
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${CONFIG.RELAY_URL.replace(/^http/, "ws")}/?user=${encodeURIComponent(volatile.userId)}`;
 
-  if (volatile.ws) {
-    volatile.ws.close();
-  }
+  $("connectionState").textContent = "Connecting...";
 
-  const ws = new WebSocket(wsUrl);
-  volatile.ws = ws;
+  try {
+    const ws = new WebSocket(wsUrl);
+    volatile.ws = ws;
 
-  ws.addEventListener("open", () => {
-    $("connectionState").textContent = "Connected";
-    ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
+    ws.onopen = () => {
+      $("connectionState").textContent = "Connected";
+      ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
 
-    // Heartbeat ping every 30 seconds to prevent idle timeout
-    if (volatile.pingInterval) clearInterval(volatile.pingInterval);
-    volatile.pingInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
-      }
-    }, 30000);
-  });
-
-  ws.addEventListener("message", async (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === "offline" && Array.isArray(data.items)) {
-        for (const item of data.items) {
-          await handleIncomingPacket(item);
-          ws.send(JSON.stringify({ type: "ack", messageId: item.messageId }));
+      // Keep-alive heartbeat ping every 20 seconds
+      if (volatile.pingInterval) clearInterval(volatile.pingInterval);
+      volatile.pingInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
         }
-      }
-      if (data.type === "message") {
-        await handleIncomingPacket(data);
-        ws.send(JSON.stringify({ type: "ack", messageId: data.messageId }));
-      }
-    } catch (e) {
-      console.error("Message parse error:", e);
-    }
-  });
+      }, 20000);
+    };
 
-  ws.addEventListener("close", () => {
-    $("connectionState").textContent = "Reconnecting...";
-    if (volatile.pingInterval) clearInterval(volatile.pingInterval);
-    
-    // Auto-reconnect after 3 seconds if disconnected by Cloudflare
+    ws.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "offline" && Array.isArray(data.items)) {
+          for (const item of data.items) {
+            await handleIncomingPacket(item);
+            ws.send(JSON.stringify({ type: "ack", messageId: item.messageId }));
+          }
+        }
+        if (data.type === "message") {
+          await handleIncomingPacket(data);
+          ws.send(JSON.stringify({ type: "ack", messageId: data.messageId }));
+        }
+      } catch (e) {
+        console.error("Message parse error:", e);
+      }
+    };
+
+    ws.onclose = () => {
+      if (volatile.pingInterval) clearInterval(volatile.pingInterval);
+      if (volatile.ws === ws) {
+        volatile.ws = null;
+        $("connectionState").textContent = "Disconnected";
+        // Quietly reconnect in 2 seconds
+        setTimeout(() => {
+          if (volatile.userId) connectRelay();
+        }, 2000);
+      }
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+  } catch (err) {
+    $("connectionState").textContent = "Disconnected";
     setTimeout(() => {
       if (volatile.userId) connectRelay();
     }, 3000);
-  });
-
-  ws.addEventListener("error", () => {
-    ws.close();
-  });
+  }
 }
 
   async function handleIncomingPacket(packet) {
