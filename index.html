@@ -101,8 +101,8 @@
     <form method="dialog" id="setupForm" class="dialog-card">
       <h2 id="setupTitle">Open secure file</h2>
       <p class="muted">Enter the local identifier and shared passphrase. Nothing is written to browser storage.</p>
-      <label>Your ID<input id="userIdInput" required maxlength="80" pattern="[A-Za-z0-9_-]{3,80}"></label>
-      <label>Contact ID<input id="contactIdInput" required maxlength="80" pattern="[A-Za-z0-9_-]{3,80}"></label>
+      <label>Your ID<input id="userIdInput" required maxlength="80" pattern="[-A-Za-z0-9_]{3,80}"></label>
+      <label>Contact ID<input id="contactIdInput" required maxlength="80" pattern="[-A-Za-z0-9_]{3,80}"></label>
       <label>Shared passphrase<input id="passphraseInput" required minlength="12" type="password" autocomplete="off"></label>
       <div class="dialog-actions">
         <button value="cancel" class="secondary">Cancel</button>
