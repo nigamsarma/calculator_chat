@@ -491,7 +491,7 @@
     if (!volatile.gisCodeClient) {
       volatile.gisCodeClient = google.accounts.oauth2.initTokenClient({
         client_id: CONFIG.GOOGLE_CLIENT_ID,
-        scope: CONFIG.DRIVE_SCOPE,
+        scope: 'https://www.googleapis.com/auth/drive.appdata',
         callback: (response) => {
           if (response.error) {
             toast("Google authorization failed");
