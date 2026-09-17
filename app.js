@@ -360,51 +360,98 @@
   }
 
   // ---------- Cloudflare WebSocket relay ----------
-  async function connectRelay() {
-    if (!CONFIG.WORKER_URL.startsWith("wss://")) {
-      toast("Configure WORKER_URL in app.js");
+  async async function connectRelay() {
+    if (!volatile.userId) {
+      console.warn("Cannot connect: volatile.userId is missing.");
+      $("connectionState").textContent = "Disconnected";
       return;
     }
-    $("connectionState").textContent = "Connecting…";
-    const url = `${CONFIG.WORKER_URL}?user=${encodeURIComponent(volatile.userId)}`;
-    const ws = new WebSocket(url);
-    volatile.ws = ws;
 
-    ws.addEventListener("open", () => {
-      $("connectionState").textContent = "Connected";
-      ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
-    });
-
-    ws.addEventListener("message", async (event) => {
-  try {
-    const data = JSON.parse(event.data);
-
-    // Handle batch of unread messages retrieved from Cloudflare KV
-    if (data.type === "offline" && Array.isArray(data.items)) {
-      for (const item of data.items) {
-        await handleIncomingPacket(item);
-        // Send ACK so Cloudflare KV deletes the delivered message
-        ws.send(JSON.stringify({ type: "ack", messageId: item.messageId }));
-      }
+    if (!CONFIG.WORKER_URL) {
+      console.error("WORKER_URL is missing in CONFIG.");
+      $("connectionState").textContent = "Config Error";
+      return;
     }
 
-    // Handle single direct message
-    if (data.type === "message") {
-      await handleIncomingPacket(data);
-      ws.send(JSON.stringify({ type: "ack", messageId: data.messageId }));
+    // Prevent duplicate socket attempts if already open or connecting
+    if (volatile.ws && (volatile.ws.readyState === WebSocket.CONNECTING || volatile.ws.readyState === WebSocket.OPEN)) {
+      return;
     }
-  } catch (err) {
-    console.error("Message parsing error:", err);
-  }
-});
 
-    ws.addEventListener("close", () => {
-      if (volatile.ws === ws) {
-        $("connectionState").textContent = "Disconnected";
-        volatile.ws = null;
-      }
-    });
-    ws.addEventListener("error", () => $("connectionState").textContent = "Relay error");
+    // Detach listeners from existing socket instance
+    if (volatile.ws) {
+      volatile.ws.onopen = null;
+      volatile.ws.onmessage = null;
+      volatile.ws.onclose = null;
+      volatile.ws.onerror = null;
+      volatile.ws.close();
+      volatile.ws = null;
+    }
+
+    // Format clean WSS endpoint URL using CONFIG.WORKER_URL
+    const baseUrl = CONFIG.WORKER_URL.trim().replace(/\/+$/, "").replace(/^http/, "ws");
+    const wsUrl = `${baseUrl}/?user=${encodeURIComponent(volatile.userId)}`;
+
+    $("connectionState").textContent = "Connecting...";
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      volatile.ws = ws;
+
+      ws.onopen = () => {
+        console.log("WebSocket connected successfully.");
+        $("connectionState").textContent = "Connected";
+        ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
+
+        if (volatile.pingInterval) clearInterval(volatile.pingInterval);
+        volatile.pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "auth", userId: volatile.userId }));
+          }
+        }, 20000);
+      };
+
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "offline" && Array.isArray(data.items)) {
+            for (const item of data.items) {
+              await handleIncomingPacket(item);
+              ws.send(JSON.stringify({ type: "ack", messageId: item.messageId }));
+            }
+          }
+          if (data.type === "message") {
+            await handleIncomingPacket(data);
+            ws.send(JSON.stringify({ type: "ack", messageId: data.messageId }));
+          }
+        } catch (e) {
+          console.error("Error parsing WebSocket payload:", e);
+        }
+      };
+
+      ws.onclose = (event) => {
+        console.warn(`WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`);
+        if (volatile.pingInterval) clearInterval(volatile.pingInterval);
+        if (volatile.ws === ws) {
+          volatile.ws = null;
+          $("connectionState").textContent = "Disconnected";
+          setTimeout(() => {
+            if (volatile.userId) connectRelay();
+          }, 3000);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error("WebSocket transport error:", err);
+        ws.close();
+      };
+    } catch (err) {
+      console.error("Failed to initiate WebSocket:", err);
+      $("connectionState").textContent = "Disconnected";
+      setTimeout(() => {
+        if (volatile.userId) connectRelay();
+      }, 3000);
+    }
   }
 
   async function handleIncomingPacket(packet) {
