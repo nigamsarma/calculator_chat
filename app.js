@@ -22,7 +22,7 @@
 
   const CONFIG = Object.freeze({
     GOOGLE_CLIENT_ID: "551221372606-r2hjsvubg2i06g01i89fcleb9rlrndge.apps.googleusercontent.com",
-    WORKER_URL: "wss://https://stealth-relay.snigamanandhasarma.workers.dev/",
+    WORKER_URL: "wss://stealth-relay.snigamanandhasarma.workers.dev/",
     PBKDF2_ITERATIONS: 150000,
     DRIVE_SCOPE: "https://www.googleapis.com/auth/drive.appdata",
     HISTORY_PREFIX: "chat_"
