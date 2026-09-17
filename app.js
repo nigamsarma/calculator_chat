@@ -360,7 +360,7 @@
   }
 
   // ---------- Cloudflare WebSocket relay ----------
-  async async function connectRelay() {
+  async function connectRelay() {
     if (!volatile.userId) {
       console.warn("Cannot connect: volatile.userId is missing.");
       $("connectionState").textContent = "Disconnected";
