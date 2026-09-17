@@ -572,7 +572,6 @@
   }
 
   async function saveHistory() {
-    // Do not make Drive mandatory for the live chat path.
     if (!volatile.driveToken || !volatile.contactId || !volatile.key) return;
     const records = [];
     for (const m of volatile.history.slice(-500)) {
@@ -589,6 +588,8 @@
     };
     const existing = await findHistoryFile().catch(() => null);
     const body = JSON.stringify(envelope);
+    const token = await ensureDriveToken();
+    if (!token) return;
 
     if (!existing) {
       const boundary = `----calculator-chat-${crypto.randomUUID()}`;
@@ -602,16 +603,23 @@
         `--${boundary}`, "Content-Type: application/json", "", body,
         `--${boundary}--`
       ].join("\r\n");
-      const res = await driveFetch(`/files?uploadType=multipart&fields=id`, {
+
+      // Uses the mandatory /upload/ endpoint path for Drive uploads
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id`, {
         method: "POST",
-        headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": `multipart/related; boundary=${boundary}`
+        },
         body: multipart
       });
-      await res.json();
     } else {
-      await driveFetch(`/files/${encodeURIComponent(existing.id)}?uploadType=media`, {
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(existing.id)}?uploadType=media`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
         body
       });
     }
