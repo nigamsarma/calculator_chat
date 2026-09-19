@@ -1,117 +1,82 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="referrer" content="no-referrer">
-  <title>Scientific Calculator</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 420px; margin: 40px auto; padding: 0 16px; }
+  input, button { font: inherit; padding: 8px; margin: 4px 0; box-sizing: border-box; }
+  input { width: 100%; }
+  button { width: 100%; cursor: pointer; }
+  #status { font-size: 14px; color: #666; }
+  #log { margin-top: 12px; }
+  #log div { padding: 8px; border-bottom: 1px solid #ddd; }
+  #log .me { color: #555; text-align: right; }
+</style>
 </head>
 <body>
-  <main id="app">
-    <section id="calculatorView" class="view">
-      <header id="titleBar" class="titlebar" title="Scientific Calculator">
-        <span>Scientific Calculator</span>
-        <span class="status-dot" aria-hidden="true"></span>
-      </header>
+  <h3>Chat</h3>
+  <div id="status">Connecting…</div>
+  <!-- Local test: ws://localhost:8787   After deploy: wss://relay.YOURNAME.workers.dev -->
+  <input id="url" value="wss://relay.snigamanandhasarma.workers.dev" aria-label="Server URL">
+  <input id="room" value="abc123" aria-label="Room (letters, numbers, - and _)">
+  <button id="connect">Connect</button>
+  <input id="text" placeholder="Type a message" aria-label="Message">
+  <button id="send" disabled>Send</button>
+  <div id="log"></div>
 
-      <div class="calculator">
-        <div class="display-wrap">
-          <div id="calcExpression" class="expression" aria-live="polite"></div>
-          <input id="calcDisplay" class="display" value="0" aria-label="Calculator display" readonly>
-        </div>
-        <div class="calc-grid" id="calcKeys">
-          <button data-action="clear" class="danger">AC</button>
-          <button data-action="backspace">⌫</button>
-          <button data-value="(">(</button>
-          <button data-value=")">)</button>
-          <button data-value="÷">÷</button>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let ws, retry = 0, timer;
 
-          <button data-value="sin(">sin</button>
-          <button data-value="cos(">cos</button>
-          <button data-value="tan(">tan</button>
-          <button data-value="π">π</button>
-          <button data-value="×">×</button>
+  function addLine(text, cls) {
+    const line = document.createElement('div');
+    line.className = cls;
+    line.textContent = text;                     // textContent avoids HTML injection
+    $('log').prepend(line);
+  }
 
-          <button data-value="7">7</button>
-          <button data-value="8">8</button>
-          <button data-value="9">9</button>
-          <button data-value="^">^</button>
-          <button data-value="-">−</button>
+  function connect() {
+    clearTimeout(timer);
+    if (ws) { ws.onclose = null; ws.close(); }
+    const base = $('url').value.trim().replace(/\/+$/, '');
+    const room = $('room').value.trim();
+    $('status').textContent = 'Connecting…';
+    ws = new WebSocket(base + '/room/' + encodeURIComponent(room));
 
-          <button data-value="4">4</button>
-          <button data-value="5">5</button>
-          <button data-value="6">6</button>
-          <button data-value="sqrt(">√</button>
-          <button data-value="+">+</button>
+    ws.onopen = () => {
+      retry = 0;
+      $('status').textContent = 'Connected to room "' + room + '"';
+      $('send').disabled = false;
+    };
+    ws.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      if (msg.type === 'msg') addLine(msg.text, 'them');
+    };
+    ws.onclose = () => {
+      $('send').disabled = true;
+      const wait = Math.min(1000 * 2 ** retry++, 15000);
+      $('status').textContent = 'Disconnected. Retrying in ' + wait / 1000 + 's…';
+      timer = setTimeout(connect, wait);
+    };
+    ws.onerror = () => ws.close();
+  }
 
-          <button data-value="1">1</button>
-          <button data-value="2">2</button>
-          <button data-value="3">3</button>
-          <button data-value="log(">log</button>
-          <button data-action="equals" class="equals">=</button>
+  function send() {
+    const text = $('text').value.trim();
+    if (!text || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: 'msg', text }));
+    addLine('You: ' + text, 'me');
+    $('text').value = '';
+    $('text').focus();
+  }
 
-          <button data-value="0" class="wide">0</button>
-          <button data-value=".">.</button>
-          <button data-value="ln(">ln</button>
-        </div>
-        <p class="decoy-hint">Scientific mode • DEG</p>
-      </div>
-    </section>
-
-    <section id="chatView" class="view hidden" aria-hidden="true">
-      <header class="chat-header">
-        <div>
-          <div class="brand">Calculator</div>
-          <div id="identityLabel" class="muted">Offline</div>
-        </div>
-        <div class="header-actions">
-          <button id="driveBtn" class="secondary">Sign in</button>
-          <button id="lockBtn" class="secondary">Lock</button>
-          <button id="panicBtn" class="panic">Clear</button>
-        </div>
-      </header>
-
-      <div class="chat-layout">
-        <aside class="contacts">
-          <div class="panel-title">Files</div>
-          <div id="contactList"></div>
-          <button id="addContactBtn" class="add-contact">+ Open file</button>
-        </aside>
-
-        <section class="conversation">
-          <div class="conversation-head">
-            <div>
-              <div id="contactTitle" class="contact-title">Select a file</div>
-              <div id="connectionState" class="muted">Not connected</div>
-            </div>
-          </div>
-          <div id="messages" class="messages" aria-live="polite"></div>
-          <form id="messageForm" class="composer" autocomplete="off">
-            <input id="messageInput" maxlength="4000" placeholder="Type a note…" disabled>
-            <button id="sendBtn" type="submit" disabled>Send</button>
-          </form>
-        </section>
-      </div>
-    </section>
-  </main>
-
-  <dialog id="setupDialog">
-    <form method="dialog" id="setupForm" class="dialog-card">
-      <h2 id="setupTitle">Open secure file</h2>
-      <p class="muted">Enter the local identifier and shared passphrase. Nothing is written to browser storage.</p>
-      <label>Your ID<input id="userIdInput" required maxlength="80" pattern="[-A-Za-z0-9_]{3,80}"></label>
-      <label>Contact ID<input id="contactIdInput" required maxlength="80" pattern="[-A-Za-z0-9_]{3,80}"></label>
-      <label>Shared passphrase<input id="passphraseInput" required minlength="12" type="password" autocomplete="off"></label>
-      <div class="dialog-actions">
-        <button value="cancel" class="secondary">Cancel</button>
-        <button id="openSecureBtn" value="default" class="primary">Open</button>
-      </div>
-    </form>
-  </dialog>
-
-  <div id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js"></script>
+  $('connect').onclick = connect;
+  $('send').onclick = send;
+  $('text').onkeydown = (e) => { if (e.key === 'Enter') send(); };
+  connect();
+</script>
 </body>
 </html>
