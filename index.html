@@ -2,81 +2,357 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Reaction Game</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 420px; margin: 40px auto; padding: 0 16px; }
-  input, button { font: inherit; padding: 8px; margin: 4px 0; box-sizing: border-box; }
-  input { width: 100%; }
-  button { width: 100%; cursor: pointer; }
-  #status { font-size: 14px; color: #666; }
-  #log { margin-top: 12px; }
-  #log div { padding: 8px; border-bottom: 1px solid #ddd; }
-  #log .me { color: #555; text-align: right; }
+  body, html {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #222; overflow: hidden;
+  }
+  
+  /* GAME UI */
+  #game-container {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 100%; height: 100%; color: white; user-select: none;
+  }
+  #target {
+    width: 100px; height: 100px; background-color: #ff4757; border-radius: 50%;
+    cursor: pointer; box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4);
+    transition: transform 0.1s; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: bold; position: relative;
+  }
+  #target:active { transform: scale(0.9); }
+  #score-display { font-size: 24px; margin-bottom: 20px; font-weight: bold; }
+  
+  /* CHAT UI */
+  #chat-app {
+    display: none; flex-direction: column; width: 100%; height: 100%;
+    background-color: #e5ddd5; max-width: 600px; margin: 0 auto; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+  }
+  
+  .header {
+    background-color: #075e54; color: white; padding: 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 600; font-size: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); z-index: 10;
+  }
+  
+  #connect-screen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    flex: 1; padding: 20px; background-color: white;
+  }
+  #connect-screen input {
+    width: 100%; max-width: 300px; padding: 12px; margin-bottom: 16px;
+    border: 1px solid #ccc; border-radius: 8px; font-size: 16px; box-sizing: border-box;
+  }
+  #connect-screen button {
+    width: 100%; max-width: 300px; padding: 12px;
+    background-color: #25d366; color: white; border: none; border-radius: 8px;
+    font-size: 16px; font-weight: bold; cursor: pointer;
+  }
+  #status { margin-top: 16px; color: #666; font-size: 14px; text-align: center; }
+  
+  #chat-screen {
+    display: none; flex-direction: column; flex: 1; overflow: hidden;
+    background-image: url('https://www.transparenttextures.com/patterns/cubes.png');
+  }
+  
+  #log {
+    flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  }
+  
+  #log div {
+    max-width: 75%; padding: 10px 14px; border-radius: 16px; font-size: 15px;
+    word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative;
+  }
+  
+  #log .them { background-color: #ffffff; align-self: flex-start; border-top-left-radius: 4px; }
+  #log .me { background-color: #dcf8c6; align-self: flex-end; border-top-right-radius: 4px; }
+  
+  .input-area {
+    display: flex; padding: 10px; background-color: #f0f0f0; align-items: center; gap: 10px;
+  }
+  #text {
+    flex: 1; padding: 12px 16px; border: none; border-radius: 24px;
+    font-size: 15px; outline: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+  }
+  #send {
+    background-color: #075e54; color: white; border: none; border-radius: 50%;
+    width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-weight: bold; font-size: 14px;
+  }
+  #send:disabled { background-color: #aaa; }
+  
+  #settings-bar {
+    display: flex; justify-content: space-between; padding: 8px 16px; background: #eee;
+    font-size: 12px; align-items: center; border-bottom: 1px solid #ddd;
+  }
+  #clear {
+    background: none; border: none; color: #d32f2f; cursor: pointer; text-decoration: underline; font-size: 12px;
+  }
+  
+  #delbox {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .delbox-content {
+    background: white; padding: 20px; border-radius: 12px; text-align: center; width: 80%; max-width: 300px;
+  }
+  .delbox-content input {
+    width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;
+  }
+  .delbox-content button {
+    padding: 8px 16px; margin: 5px; border: none; border-radius: 6px; cursor: pointer;
+  }
+  #delok { background: #d32f2f; color: white; }
+  #delcancel { background: #ddd; color: black; }
+  #delmsg { color: #d32f2f; font-size: 12px; margin-top: 10px; }
+  
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-  <h3>Chat</h3>
-  <div id="status">Connecting…</div>
-  <!-- Local test: ws://localhost:8787   After deploy: wss://relay.YOURNAME.workers.dev -->
-  <input id="url" value="wss://relay.snigamanandhasarma.workers.dev" aria-label="Server URL">
-  <input id="room" value="abc123" aria-label="Room (letters, numbers, - and _)">
-  <button id="connect">Connect</button>
-  <input id="text" placeholder="Type a message" aria-label="Message">
-  <button id="send" disabled>Send</button>
-  <div id="log"></div>
+  
+  <!-- GAME UI -->
+  <div id="game-container">
+    <div id="score-display">Score: <span id="score">0</span></div>
+    <div id="target">TAP</div>
+  </div>
+
+  <!-- CHAT UI -->
+  <div id="chat-app">
+    <div class="header">
+      <div>Secure Chat</div>
+      <div id="close-chat" style="cursor:pointer; font-size:24px;" aria-label="Close Chat">&times;</div>
+    </div>
+    
+    <div id="connect-screen">
+      <input id="key" type="password" placeholder="Shared key" aria-label="Shared key">
+      <button id="connect">Connect</button>
+      <div id="status">Enter the shared key, then Connect.</div>
+    </div>
+    
+    <div id="chat-screen">
+      <div id="settings-bar">
+        <span>Connected</span>
+        <button id="clear" disabled>Delete history</button>
+      </div>
+      <div id="log"></div>
+      <div class="input-area">
+        <input id="text" maxlength="1000" placeholder="Type a message" aria-label="Message">
+        <button id="send" disabled>Go</button>
+      </div>
+    </div>
+    
+    <div id="delbox" hidden>
+      <div class="delbox-content">
+        <h4>Delete History?</h4>
+        <input id="delpass" type="password" placeholder="Enter key to confirm" aria-label="Shared key to confirm deletion">
+        <button id="delcancel">Cancel</button>
+        <button id="delok">Delete</button>
+        <div id="delmsg"></div>
+      </div>
+    </div>
+  </div>
 
 <script>
-  const $ = (id) => document.getElementById(id);
-  let ws, retry = 0, timer;
+  // --- GAME LOGIC & DISGUISE ---
+  let score = 0;
+  const target = document.getElementById('target');
+  const scoreEl = document.getElementById('score');
+  
+  target.addEventListener('click', (e) => {
+    e.stopPropagation(); // Prevent document click from triggering the chat reveal
+    score++;
+    scoreEl.innerText = score;
+    // Move target randomly within safe bounds
+    const maxX = window.innerWidth - 120;
+    const maxY = window.innerHeight - 200;
+    const x = Math.max(0, Math.floor(Math.random() * maxX));
+    const y = Math.max(0, Math.floor(Math.random() * maxY));
+    target.style.transform = `translate(${x - window.innerWidth/2 + 60}px, ${y - window.innerHeight/2 + 100}px)`;
+  });
 
-  function addLine(text, cls) {
-    const line = document.createElement('div');
-    line.className = cls;
-    line.textContent = text;                     // textContent avoids HTML injection
-    $('log').prepend(line);
+  // Triple click detection to reveal chat
+  let clickCount = 0;
+  let clickTimer = null;
+  document.addEventListener('click', (e) => {
+    if (document.getElementById('chat-app').style.display === 'flex') return;
+    
+    clickCount++;
+    if (clickCount === 3) {
+      document.getElementById('game-container').style.display = 'none';
+      document.getElementById('chat-app').style.display = 'flex';
+      clickCount = 0;
+    }
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => {
+      clickCount = 0;
+    }, 1000); // Reset click count after 1 second
+  });
+  
+  // Close chat functionality
+  document.getElementById('close-chat').addEventListener('click', () => {
+    document.getElementById('game-container').style.display = 'flex';
+    document.getElementById('chat-app').style.display = 'none';
+  });
+
+  // --- CHAT LOGIC ---
+  const RELAY = 'wss://relay.snigamanandhasarma.workers.dev';
+
+  const $ = (id) => document.getElementById(id);
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const toB64 = (u8) => btoa(String.fromCharCode(...u8));
+  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+  let myId;
+  try {
+    myId = localStorage.getItem('chat-id');
+    if (!myId) { myId = hex(crypto.getRandomValues(new Uint8Array(16))); localStorage.setItem('chat-id', myId); }
+  } catch { myId = hex(crypto.getRandomValues(new Uint8Array(16))); }
+
+  let ws, keys, retry = 0, timer, opened = false, current = '';
+  const msgs = new Map();
+
+  async function deriveKeys(pass) {
+    const base = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveBits']);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: enc.encode('chat-v2'), iterations: 200000, hash: 'SHA-256' }, base, 512));
+    const token = hex(bits.slice(32));
+    const room = hex(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode('room:' + token)))).slice(0, 32);
+    return {
+      aes: await crypto.subtle.importKey('raw', bits.slice(0, 32), 'AES-GCM', false, ['encrypt', 'decrypt']),
+      token, room,
+    };
   }
 
-  function connect() {
+  async function encrypt(obj) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, keys.aes, enc.encode(JSON.stringify(obj))));
+    const out = new Uint8Array(12 + ct.length);
+    out.set(iv);
+    out.set(ct, 12);
+    return toB64(out);
+  }
+
+  async function decrypt(b64) {
+    try {
+      const raw = fromB64(b64);
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, keys.aes, raw.slice(12));
+      return JSON.parse(dec.decode(pt));
+    } catch { return null; }
+  }
+
+  function render() {
+    const log = $('log');
+    log.textContent = '';
+    for (const m of [...msgs.values()].sort((a, b) => a.ts - b.ts)) {
+      const line = document.createElement('div');
+      line.className = m.from === myId ? 'me' : 'them';
+      line.textContent = m.text;
+      log.append(line);
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function addFromServer(m) {
+    if (msgs.has(m.id)) { msgs.get(m.id).ts = m.ts; return; }
+    const p = await decrypt(m.data);
+    msgs.set(m.id, { ts: m.ts, from: p ? p.f : '?', text: p ? p.t : '[could not decrypt]' });
+  }
+
+  function closeDel() {
+    $('delbox').hidden = true;
+    $('delpass').value = '';
+    $('delmsg').textContent = '';
+  }
+
+  async function connect() {
     clearTimeout(timer);
     if (ws) { ws.onclose = null; ws.close(); }
-    const base = $('url').value.trim().replace(/\/+$/, '');
-    const room = $('room').value.trim();
-    $('status').textContent = 'Connecting…';
-    ws = new WebSocket(base + '/room/' + encodeURIComponent(room));
+    const pass = $('key').value;
+    if (!pass) { $('status').textContent = 'Enter the shared key.'; return; }
+    if (!window.crypto || !crypto.subtle) { $('status').textContent = 'Needs https:// (or localhost).'; return; }
 
+    $('status').textContent = 'Connecting…';
+    if (pass !== current || !keys) {
+      keys = null; msgs.clear(); render(); current = pass;
+      keys = await deriveKeys(pass);
+    }
+
+    opened = false;
+    ws = new WebSocket(RELAY + '/room/' + keys.room + '?t=' + keys.token);
     ws.onopen = () => {
-      retry = 0;
-      $('status').textContent = 'Connected to room "' + room + '"';
+      opened = true; retry = 0;
+      $('status').textContent = 'Connected.';
       $('send').disabled = false;
+      $('clear').disabled = false;
+      ws.send(JSON.stringify({ type: 'sync' }));
+      
+      $('connect-screen').style.display = 'none';
+      $('chat-screen').style.display = 'flex';
     };
-    ws.onmessage = (e) => {
+    ws.onmessage = async (e) => {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
-      if (msg.type === 'msg') addLine(msg.text, 'them');
+      if (msg.type === 'history') {
+        const ids = new Set(msg.messages.map((m) => m.id));
+        for (const [mid, m] of msgs) if (!ids.has(mid) && m.ts < Date.now() - 5000) msgs.delete(mid);
+        for (const m of msg.messages) await addFromServer(m);
+        render();
+      }
+      else if (msg.type === 'msg') { await addFromServer(msg); render(); }
+      else if (msg.type === 'cleared') { msgs.clear(); render(); closeDel(); $('status').textContent = 'Chat history deleted.'; }
     };
     ws.onclose = () => {
       $('send').disabled = true;
+      $('clear').disabled = true;
+      closeDel();
       const wait = Math.min(1000 * 2 ** retry++, 15000);
-      $('status').textContent = 'Disconnected. Retrying in ' + wait / 1000 + 's…';
+      $('status').textContent = (opened ? 'Disconnected.' : 'Could not connect.') +
+        ' Retrying in ' + wait / 1000 + 's…';
       timer = setTimeout(connect, wait);
+      
+      $('connect-screen').style.display = 'flex';
+      $('chat-screen').style.display = 'none';
     };
     ws.onerror = () => ws.close();
   }
 
-  function send() {
+  async function send() {
     const text = $('text').value.trim();
-    if (!text || ws.readyState !== 1) return;
-    ws.send(JSON.stringify({ type: 'msg', text }));
-    addLine('You: ' + text, 'me');
+    if (!text || !ws || ws.readyState !== 1) return;
     $('text').value = '';
+    const id = hex(crypto.getRandomValues(new Uint8Array(12)));
+    const data = await encrypt({ f: myId, t: text });
+    if (ws.readyState !== 1) { $('text').value = text; return; }
+    ws.send(JSON.stringify({ type: 'msg', id, data }));
+    msgs.set(id, { ts: Date.now(), from: myId, text });
+    render();
     $('text').focus();
   }
 
+  async function confirmDelete() {
+    if (!ws || ws.readyState !== 1) return;
+    let ok = false;
+    try { ok = (await deriveKeys($('delpass').value)).token === keys.token; } catch {}
+    $('delpass').value = '';
+    if (!ok) { $('delmsg').textContent = 'Wrong password.'; return; }
+    closeDel();
+    ws.send(JSON.stringify({ type: 'clear' }));
+  }
+
   $('connect').onclick = connect;
+  $('key').onkeydown = (e) => { if (e.key === 'Enter') connect(); };
   $('send').onclick = send;
   $('text').onkeydown = (e) => { if (e.key === 'Enter') send(); };
-  connect();
+  $('clear').onclick = () => {
+    if ($('delbox').hidden) { $('delbox').hidden = false; $('delpass').focus(); } else closeDel();
+  };
+  $('delok').onclick = confirmDelete;
+  $('delcancel').onclick = closeDel;
+  $('delpass').onkeydown = (e) => { if (e.key === 'Enter') confirmDelete(); };
 </script>
 </body>
 </html>
