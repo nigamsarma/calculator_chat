@@ -158,6 +158,13 @@
   </div>
 
 <script>
+  const $ = (id) => document.getElementById(id);
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const toB64 = (u8) => btoa(String.fromCharCode(...u8));
+  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  let ws, keys, retry = 0, timer, opened = false, current = '';
+
   // --- PUSH NOTIFICATIONS ---
   const publicVapidKey = 'BKfRU96rWmoC8gMrRfqaKHkxlotuDtV0sHL6-cXFznMzAtFIILA2mcEqdrD6bJ4b6oOFrPHBvs4qCkTEV2HHruA';
   let pushSubscription = null;
@@ -257,19 +264,12 @@
   // --- CHAT LOGIC ---
   const RELAY = 'wss://relay.snigamanandhasarma.workers.dev';
 
-  const $ = (id) => document.getElementById(id);
-  const enc = new TextEncoder(), dec = new TextDecoder();
-  const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, '0')).join('');
-  const toB64 = (u8) => btoa(String.fromCharCode(...u8));
-  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-
   let myId;
   try {
     myId = localStorage.getItem('chat-id');
     if (!myId) { myId = hex(crypto.getRandomValues(new Uint8Array(16))); localStorage.setItem('chat-id', myId); }
   } catch { myId = hex(crypto.getRandomValues(new Uint8Array(16))); }
 
-  let ws, keys, retry = 0, timer, opened = false, current = '';
   const msgs = new Map();
 
   async function deriveKeys(pass) {
