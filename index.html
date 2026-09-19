@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="manifest" href="manifest.json">
 <title>Reaction Game</title>
 <style>
   body, html {
@@ -129,6 +130,7 @@
     <div id="connect-screen">
       <input id="key" type="password" placeholder="Shared key" aria-label="Shared key">
       <button id="connect">Connect</button>
+      <button id="enable-push" style="margin-top:10px; background-color:#3498db; display:none;">Enable Push</button>
       <div id="status">Enter the shared key, then Connect.</div>
     </div>
     
@@ -156,16 +158,73 @@
   </div>
 
 <script>
+  // --- PUSH NOTIFICATIONS ---
+  const publicVapidKey = 'BKfRU96rWmoC8gMrRfqaKHkxlotuDtV0sHL6-cXFznMzAtFIILA2mcEqdrD6bJ4b6oOFrPHBvs4qCkTEV2HHruA';
+  let pushSubscription = null;
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+    return outputArray;
+  }
+
+  async function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      try {
+        const register = await navigator.serviceWorker.register('/sw.js');
+        console.log('SW registered');
+        return register;
+      } catch (e) { console.error('SW registration failed'); }
+    }
+  }
+
+  async function subscribeToPush() {
+    const register = await navigator.serviceWorker.ready;
+    try {
+      pushSubscription = await register.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+      });
+      console.log('Push Subscribed');
+      if (ws && ws.readyState === 1) sendSubscription();
+    } catch(e) { console.error('Push subscription error', e); }
+  }
+
+  $('enable-push').onclick = async () => {
+    const status = await Notification.requestPermission();
+    if (status === 'granted') {
+      await subscribeToPush();
+      $('enable-push').style.display = 'none';
+    }
+  };
+
+  registerServiceWorker().then(async (reg) => {
+    if (reg) {
+      pushSubscription = await reg.pushManager.getSubscription();
+      if (!pushSubscription && Notification.permission !== 'denied') {
+        $('enable-push').style.display = 'block';
+      }
+    }
+  });
+
+  function sendSubscription() {
+    if (pushSubscription && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'subscribe', sub: pushSubscription }));
+    }
+  }
+
   // --- GAME LOGIC & DISGUISE ---
   let score = 0;
   const target = document.getElementById('target');
   const scoreEl = document.getElementById('score');
   
   target.addEventListener('click', (e) => {
-    e.stopPropagation(); // Prevent document click from triggering the chat reveal
+    e.stopPropagation();
     score++;
     scoreEl.innerText = score;
-    // Move target randomly within safe bounds
     const maxX = window.innerWidth - 120;
     const maxY = window.innerHeight - 200;
     const x = Math.max(0, Math.floor(Math.random() * maxX));
@@ -173,7 +232,6 @@
     target.style.transform = `translate(${x - window.innerWidth/2 + 60}px, ${y - window.innerHeight/2 + 100}px)`;
   });
 
-  // Triple click detection to reveal chat
   let clickCount = 0;
   let clickTimer = null;
   document.addEventListener('click', (e) => {
@@ -188,10 +246,9 @@
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => {
       clickCount = 0;
-    }, 1000); // Reset click count after 1 second
+    }, 1000);
   });
   
-  // Close chat functionality
   document.getElementById('close-chat').addEventListener('click', () => {
     document.getElementById('game-container').style.display = 'flex';
     document.getElementById('chat-app').style.display = 'none';
@@ -289,6 +346,7 @@
       $('send').disabled = false;
       $('clear').disabled = false;
       ws.send(JSON.stringify({ type: 'sync' }));
+      sendSubscription();
       
       $('connect-screen').style.display = 'none';
       $('chat-screen').style.display = 'flex';
