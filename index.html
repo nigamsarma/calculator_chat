@@ -123,7 +123,7 @@
   <!-- CHAT UI -->
   <div id="chat-app">
     <div class="header">
-      <div>Pigeon Chit</div>
+      <div>Secure Chat</div>
       <div id="close-chat" style="cursor:pointer; font-size:24px;" aria-label="Close Chat">&times;</div>
     </div>
     
@@ -213,6 +213,8 @@
       pushSubscription = await reg.pushManager.getSubscription();
       if (!pushSubscription && Notification.permission !== 'denied') {
         $('enable-push').style.display = 'block';
+      } else if (pushSubscription) {
+        if (ws && ws.readyState === 1) sendSubscription();
       }
     }
   });
