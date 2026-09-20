@@ -20,7 +20,7 @@ self.addEventListener('push', function(event) {
     // Wait 2.5 seconds to see if we hear a heartbeat from the app
     setTimeout(async () => {
       // If we heard a heartbeat in the last 3 seconds, the app is open!
-      if (Date.now() - lastAwake < 3000) {
+      if (Date.now() - lastAwake < 1000) {
         resolve(); // Drop the notification
         return;
       }
@@ -42,7 +42,7 @@ self.addEventListener('push', function(event) {
 
       await self.registration.showNotification('Youtube', options);
       resolve();
-    }, 2500);
+    }, 700);
   }));
 });
 
