@@ -414,12 +414,16 @@
   $('delcancel').onclick = closeDel;
   $('delpass').onkeydown = (e) => { if (e.key === 'Enter') confirmDelete(); };
 
-  // Send a heartbeat to the Service Worker every 2 seconds while looking at the screen
+  // Bulletproof heartbeat that forces its way to the active Service Worker
   setInterval(() => {
-    if (document.visibilityState === 'visible' && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage('awake');
+    if (document.visibilityState === 'visible') {
+      navigator.serviceWorker.ready.then(reg => {
+        if (reg.active) {
+          reg.active.postMessage('awake');
+        }
+      });
     }
-  }, 2000);
+  }, 500);
 </script>
 </body>
 </html>
