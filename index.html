@@ -414,13 +414,12 @@
   $('delcancel').onclick = closeDel;
   $('delpass').onkeydown = (e) => { if (e.key === 'Enter') confirmDelete(); };
 
-  const bc = new BroadcastChannel('chat-focus');
-  bc.onmessage = (e) => {
-    // If the Service worker asks, and we are looking at the screen, reply!
-    if (e.data === 'ping' && document.visibilityState === 'visible') {
-      bc.postMessage('focused');
+  // Send a heartbeat to the Service Worker every 2 seconds while looking at the screen
+  setInterval(() => {
+    if (document.visibilityState === 'visible' && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage('awake');
     }
-  };
+  }, 2000);
 </script>
 </body>
 </html>
