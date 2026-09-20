@@ -7,23 +7,33 @@ self.addEventListener('activate', function(event) {
 });
 
 self.addEventListener('push', function(event) {
-  let body = 'Check the latest Youtube video!';
-  if (event.data) {
-    body = event.data.text();
-  }
+  event.waitUntil(async function() {
+    // 1. Check if the app is currently open and focused on the screen
+    const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clientList) {
+      if (client.focused && client.visibilityState === 'visible') {
+        // The user is actively looking at the chat, so don't show a notification!
+        return;
+      }
+    }
+
+    // 2. If the app is closed or in the background, show the notification
+    let body = 'Check latest videos in Youtube!';
+    if (event.data) {
+      body = event.data.text();
+    }
 
     const options = {
-    body: body,
-    tag: 'chat-update',
-    data: {
-      dateOfArrival: Date.now(),
-      primaryKey: '1'
-    }
-  };
+      body: body,
+      tag: 'chat-update',
+      data: {
+        dateOfArrival: Date.now(),
+        primaryKey: '1'
+      }
+    };
 
-  event.waitUntil(
-    self.registration.showNotification('Youtube', options)
-  );
+    await self.registration.showNotification('Youtube', options);
+  }());
 });
 
 self.addEventListener('notificationclick', function(event) {
