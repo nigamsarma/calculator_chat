@@ -131,6 +131,7 @@
       <input id="key" type="password" placeholder="Shared key" aria-label="Shared key">
       <button id="connect">Connect</button>
       <button id="enable-push" style="margin-top:10px; background-color:#3498db;">Enable Push</button>
+      <button id="setup-bio" style="margin-top: 15px; background: #6c5ce7; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; width: 100%;">🔒 Enable Face/Touch ID Lock</button>
       <div id="status">Enter the shared key, then Connect.</div>
     </div>
     
@@ -241,22 +242,60 @@
     target.style.transform = `translate(${x - window.innerWidth/2 + 60}px, ${y - window.innerHeight/2 + 100}px)`;
   });
 
-  let clickCount = 0;
-  let clickTimer = null;
-  document.addEventListener('click', (e) => {
+   // --- NEW BIOMETRIC & LONG HOLD LOGIC ---
+  let holdTimer = null;
+
+  async function attemptUnlock() {
+    const savedCred = localStorage.getItem('biometric-id');
+    if (savedCred) {
+      try {
+        const challenge = new Uint8Array(32);
+        crypto.getRandomValues(challenge);
+        // Trigger native Face ID / Touch ID
+        await navigator.credentials.get({
+          publicKey: {
+            challenge: challenge,
+            allowCredentials: [{
+              id: Uint8Array.from(atob(savedCred), c => c.charCodeAt(0)),
+              type: 'public-key'
+            }],
+            userVerification: 'required'
+          }
+        });
+        openChat(); // Success!
+      } catch (e) {
+        console.log('Biometric failed or canceled');
+      }
+    } else {
+      openChat(); // No lock setup yet
+    }
+  }
+
+  function openChat() {
+    document.getElementById('game-container').style.display = 'none';
+    document.getElementById('chat-app').style.display = 'flex';
+  }
+
+  function startHold(e) {
+    if (e.target.id === 'target') return; // Ignore clicks on the red game dot
     if (document.getElementById('chat-app').style.display === 'flex') return;
     
-    clickCount++;
-    if (clickCount === 3) {
-      document.getElementById('game-container').style.display = 'none';
-      document.getElementById('chat-app').style.display = 'flex';
-      clickCount = 0;
-    }
-    clearTimeout(clickTimer);
-    clickTimer = setTimeout(() => {
-      clickCount = 0;
-    }, 1000);
-  });
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(attemptUnlock, 4000); // Wait exactly 4 seconds
+  }
+
+  function cancelHold() {
+    clearTimeout(holdTimer);
+  }
+
+  // Support both Mouse (Laptop) and Touch (Phones)
+  document.addEventListener('mousedown', startHold);
+  document.addEventListener('touchstart', startHold);
+
+  document.addEventListener('mouseup', cancelHold);
+  document.addEventListener('touchend', cancelHold);
+  document.addEventListener('mousemove', cancelHold);
+  document.addEventListener('touchmove', cancelHold);
   
   document.getElementById('close-chat').addEventListener('click', () => {
     document.getElementById('game-container').style.display = 'flex';
@@ -414,6 +453,41 @@
   $('delcancel').onclick = closeDel;
   $('delpass').onkeydown = (e) => { if (e.key === 'Enter') confirmDelete(); };
 
+  // enable biometric button
+  const bioBtn = document.getElementById('setup-bio');
+  if (localStorage.getItem('biometric-id')) {
+    bioBtn.style.display = 'none'; // Hide the button if already locked
+  }
+
+  bioBtn.onclick = async () => {
+    try {
+      const challenge = new Uint8Array(32);
+      const userId = new Uint8Array(16);
+      crypto.getRandomValues(challenge);
+      crypto.getRandomValues(userId);
+
+      // Register the face/fingerprint locally
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge: challenge,
+          rp: { name: "Reaction Game" },
+          user: { id: userId, name: "admin", displayName: "Admin" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+          authenticatorSelection: { userVerification: "required" },
+          timeout: 60000
+        }
+      });
+
+      // Save the secret ID to the browser
+      const credId = btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
+      localStorage.setItem('biometric-id', credId);
+      alert('Success! The app is now strictly locked to your biometrics.');
+      bioBtn.style.display = 'none';
+    } catch (e) {
+      alert('Failed to setup biometrics: ' + e.message);
+    }
+  };
+  
   // Bulletproof heartbeat that forces its way to the active Service Worker
   setInterval(() => {
     if (document.visibilityState === 'visible') {
