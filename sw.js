@@ -7,33 +7,48 @@ self.addEventListener('activate', function(event) {
 });
 
 self.addEventListener('push', function(event) {
-  event.waitUntil(async function() {
-    // 1. Check if the app is currently open and focused on the screen
-    const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const client of clientList) {
-     if (client.visibilityState === 'visible') {
-        // The user is actively looking at the chat, so don't show a notification!
-        return;
-      }
-    }
-
-    // 2. If the app is closed or in the background, show the notification
-    let body = 'Check latest videos in Youtube!';
-    if (event.data) {
-      body = event.data.text();
-    }
-
-    const options = {
-      body: body,
-      tag: 'chat-update',
-      data: {
-        dateOfArrival: Date.now(),
-        primaryKey: '1'
+  event.waitUntil(new Promise((resolve) => {
+    const bc = new BroadcastChannel('chat-focus');
+    let isAppFocused = false;
+    
+    // Listen for the app's reply
+    bc.onmessage = (e) => {
+      if (e.data === 'focused') {
+        isAppFocused = true;
       }
     };
+    
+    // Shout into the void to see if the app is open
+    bc.postMessage('ping');
+    
+    // Give the app half a second to reply
+    setTimeout(async () => {
+      bc.close();
+      
+      if (isAppFocused) {
+        resolve(); // App replied! Drop the notification silently.
+        return;
+      }
+      
+      // App didn't reply (it's closed or hidden). Show notification!
+      let body = 'Check latest videos in Youtube!!';
+      if (event.data) {
+        body = event.data.text();
+      }
 
-    await self.registration.showNotification('Youtube', options);
-  }());
+      const options = {
+        body: body,
+        tag: 'chat-update',
+        data: {
+          dateOfArrival: Date.now(),
+          primaryKey: '1'
+        }
+      };
+
+      await self.registration.showNotification('Youtube', options);
+      resolve();
+    }, 500);
+  }));
 });
 
 self.addEventListener('notificationclick', function(event) {
