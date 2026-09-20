@@ -6,32 +6,27 @@ self.addEventListener('activate', function(event) {
   event.waitUntil(clients.claim());
 });
 
+let lastAwake = 0;
+
+// Listen for the heartbeat from the app
+self.addEventListener('message', (event) => {
+  if (event.data === 'awake') {
+    lastAwake = Date.now();
+  }
+});
+
 self.addEventListener('push', function(event) {
   event.waitUntil(new Promise((resolve) => {
-    const bc = new BroadcastChannel('chat-focus');
-    let isAppFocused = false;
-    
-    // Listen for the app's reply
-    bc.onmessage = (e) => {
-      if (e.data === 'focused') {
-        isAppFocused = true;
-      }
-    };
-    
-    // Shout into the void to see if the app is open
-    bc.postMessage('ping');
-    
-    // Give the app half a second to reply
+    // Wait 2.5 seconds to see if we hear a heartbeat from the app
     setTimeout(async () => {
-      bc.close();
-      
-      if (isAppFocused) {
-        resolve(); // App replied! Drop the notification silently.
+      // If we heard a heartbeat in the last 3 seconds, the app is open!
+      if (Date.now() - lastAwake < 3000) {
+        resolve(); // Drop the notification
         return;
       }
       
-      // App didn't reply (it's closed or hidden). Show notification!
-      let body = 'Check latest videos in Youtube!!';
+      // No heartbeat heard, app is closed. Show notification!
+      let body = 'Check  latest videos in Youtube!';
       if (event.data) {
         body = event.data.text();
       }
@@ -47,7 +42,7 @@ self.addEventListener('push', function(event) {
 
       await self.registration.showNotification('Youtube', options);
       resolve();
-    }, 500);
+    }, 2500);
   }));
 });
 
