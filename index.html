@@ -276,26 +276,25 @@
     document.getElementById('chat-app').style.display = 'flex';
   }
 
-  function startHold(e) {
+    let clickCount = 0;
+  let clickTimer = null;
+  
+  document.addEventListener('click', (e) => {
     if (e.target.id === 'target') return; // Ignore clicks on the red game dot
     if (document.getElementById('chat-app').style.display === 'flex') return;
     
-    clearTimeout(holdTimer);
-    holdTimer = setTimeout(attemptUnlock, 4000); // Wait exactly 4 seconds
-  }
-
-  function cancelHold() {
-    clearTimeout(holdTimer);
-  }
-
-  // Support both Mouse (Laptop) and Touch (Phones)
-  document.addEventListener('mousedown', startHold);
-  document.addEventListener('touchstart', startHold);
-
-  document.addEventListener('mouseup', cancelHold);
-  document.addEventListener('touchend', cancelHold);
-  document.addEventListener('mousemove', cancelHold);
-  document.addEventListener('touchmove', cancelHold);
+    clickCount++;
+    if (clickCount === 3) {
+      clickCount = 0;
+      attemptUnlock(); // Triggers the Face ID / Password screen!
+    }
+    
+    // Reset the count if they don't tap 3 times within 1 second
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => {
+      clickCount = 0;
+    }, 1000);
+  });
   
   document.getElementById('close-chat').addEventListener('click', () => {
     document.getElementById('game-container').style.display = 'flex';
