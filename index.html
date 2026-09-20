@@ -489,15 +489,14 @@
   };
   
   // Bulletproof heartbeat that forces its way to the active Service Worker
+   // Write our awake status directly to the iPhone's shared storage every 1 second
   setInterval(() => {
     if (document.visibilityState === 'visible') {
-      navigator.serviceWorker.ready.then(reg => {
-        if (reg.active) {
-          reg.active.postMessage('awake');
-        }
+      caches.open('chat-state').then(cache => {
+        cache.put('/awake', new Response(Date.now().toString()));
       });
     }
-  }, 500);
+  }, 1000);
 </script>
 </body>
 </html>
