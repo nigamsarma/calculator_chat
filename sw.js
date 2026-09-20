@@ -21,7 +21,7 @@ self.addEventListener('push', function(event) {
   };
 
   event.waitUntil(
-    self.registration.showNotification('Reaction Game', options)
+    self.registration.showNotification('Youtube', options)
   );
 });
 
