@@ -11,7 +11,7 @@ self.addEventListener('push', function(event) {
     // 1. Check if the app is currently open and focused on the screen
     const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of clientList) {
-      if (client.focused && client.visibilityState === 'visible') {
+     if (client.visibilityState === 'visible') {
         // The user is actively looking at the chat, so don't show a notification!
         return;
       }
