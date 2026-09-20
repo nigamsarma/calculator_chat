@@ -413,6 +413,14 @@
   $('delok').onclick = confirmDelete;
   $('delcancel').onclick = closeDel;
   $('delpass').onkeydown = (e) => { if (e.key === 'Enter') confirmDelete(); };
+
+  const bc = new BroadcastChannel('chat-focus');
+  bc.onmessage = (e) => {
+    // If the Service worker asks, and we are looking at the screen, reply!
+    if (e.data === 'ping' && document.visibilityState === 'visible') {
+      bc.postMessage('focused');
+    }
+  };
 </script>
 </body>
 </html>
