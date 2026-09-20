@@ -7,7 +7,7 @@ self.addEventListener('activate', function(event) {
 });
 
 self.addEventListener('push', function(event) {
-  let body = 'You have a new secure message.';
+  let body = 'Check the latest Youtube video!';
   if (event.data) {
     body = event.data.text();
   }
