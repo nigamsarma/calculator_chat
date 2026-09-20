@@ -12,8 +12,9 @@ self.addEventListener('push', function(event) {
     body = event.data.text();
   }
 
-  const options = {
+    const options = {
     body: body,
+    tag: 'chat-update',
     data: {
       dateOfArrival: Date.now(),
       primaryKey: '1'
