@@ -6,27 +6,30 @@ self.addEventListener('activate', function(event) {
   event.waitUntil(clients.claim());
 });
 
-let lastAwake = 0;
-
-// Listen for the heartbeat from the app
-self.addEventListener('message', (event) => {
-  if (event.data === 'awake') {
-    lastAwake = Date.now();
-  }
-});
-
 self.addEventListener('push', function(event) {
   event.waitUntil(new Promise((resolve) => {
-    // Wait 2.5 seconds to see if we hear a heartbeat from the app
     setTimeout(async () => {
-      // If we heard a heartbeat in the last 3 seconds, the app is open!
-      if (Date.now() - lastAwake < 1000) {
-        resolve(); // Drop the notification
+      let isAwake = false;
+      
+      try {
+        // Read the shared storage to see if the app wrote to it in the last 2 seconds
+        const cache = await caches.open('chat-state');
+        const res = await cache.match('/awake');
+        if (res) {
+          const lastAwake = parseInt(await res.text(), 10);
+          if (Date.now() - lastAwake < 2000) {
+            isAwake = true;
+          }
+        }
+      } catch (e) {}
+
+      // If the app is open, drop the notification silently!
+      if (isAwake) {
+        resolve(); 
         return;
       }
       
-      // No heartbeat heard, app is closed. Show notification!
-      let body = 'Check  latest videos in Youtube!';
+      let body = 'Check latest videos in Youtube!';
       if (event.data) {
         body = event.data.text();
       }
