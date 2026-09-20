@@ -387,7 +387,7 @@
     const id = hex(crypto.getRandomValues(new Uint8Array(12)));
     const data = await encrypt({ f: myId, t: text });
     if (ws.readyState !== 1) { $('text').value = text; return; }
-    ws.send(JSON.stringify({ type: 'msg', id, data }));
+    ws.send(JSON.stringify({ type: 'msg', id, data, endpoint: pushSubscription ? pushSubscription.endpoint : null }));
     msgs.set(id, { ts: Date.now(), from: myId, text });
     render();
     $('text').focus();
