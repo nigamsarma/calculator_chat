@@ -515,7 +515,7 @@
           line.textContent = '';
           const img = document.createElement('img');
           img.src = m.url;
-          img.style.cssText = 'max-width:100%; max-height:250px; border-radius:8px; cursor:pointer; margin-bottom:4px; display:block; object-fit:contain; background:#f0f0f0;';
+          img.style.cssText = 'max-width:100%; max-height:250px; border-radius:8px; cursor:pointer; margin-bottom:4px; display:block; object-fit:contain;';
           img.onclick = () => window.openImage(m.url, id);
           line.appendChild(img);
         } else {
@@ -559,7 +559,7 @@
             line.textContent = '';
             const img = document.createElement('img');
             img.src = m.url;
-            img.style.cssText = 'max-width:100%; max-height:250px; border-radius:8px; cursor:pointer; margin-bottom:4px; display:block; object-fit:contain; background:#f0f0f0;';
+            img.style.cssText = 'max-width:100%; max-height:250px; border-radius:8px; cursor:pointer; margin-bottom:4px; display:block; object-fit:contain;';
             img.onclick = () => window.openImage(m.url, id);
             line.appendChild(img);
           } else {
@@ -758,7 +758,7 @@
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0, w, h);
     
-    const base64Url = canvas.toDataURL('image/jpeg', 0.6);
+    const base64Url = canvas.toDataURL('image/webp', 0.6);
     
     try {
       $('text').innerText = 'Encrypting & Sending...';
