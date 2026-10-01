@@ -157,7 +157,9 @@
       </div>
       <div id="log"></div>
       <div class="input-area">
-        <input id="text" maxlength="1000" placeholder="Type a message" aria-label="Message">
+        <input type="file" id="image-upload" accept="image/*" style="display:none;">
+        <button id="attach-btn" style="background:none; border:none; font-size:24px; cursor:pointer; padding:0 8px;">📎</button>
+        <div id="text" contenteditable="true" placeholder="Type a message" aria-label="Message" style="flex:1; padding:10px; border-radius:20px; border:1px solid #ccc; background:white; min-height:20px; max-height:100px; overflow-y:auto; outline:none; font-family:sans-serif; font-size:14px; white-space:pre-wrap; word-break:break-word;"></div>
         <button id="send" disabled>Go</button>
       </div>
     </div>
@@ -169,10 +171,95 @@
         <button id="delok">Delete</button>
       </div>
     </div>
+    
+    <div id="image-modal" hidden style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:200;">
+      <div style="position:absolute; top:20px; right:20px; font-size:30px; color:white; cursor:pointer; padding:10px;" id="close-image-modal">&times;</div>
+      <img id="modal-img" style="max-width:95%; max-height:75%; object-fit:contain; border-radius:8px;">
+      <a id="modal-download" download style="margin-top:20px; padding:10px 20px; background:#25d366; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">Download Image</a>
+      <button id="modal-delete" style="margin-top:10px; padding:10px 20px; background:#ff3b30; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Delete Message</button>
+    </div>
   </div>
 
 <script type="module">
-  const $ = (id) => document.getElementById(id);
+// ... existing scripts up to the image handler
+
+  async function processAndSendImageFile(file) {
+    if (!file) return;
+    
+    $('text').innerText = 'Compressing image...';
+    $('send').disabled = true;
+    
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    await new Promise(r => img.onload = r);
+    
+    const canvas = document.createElement('canvas');
+    let w = img.width, h = img.height;
+    if (w > 800) { h *= 800 / w; w = 800; }
+    if (h > 800) { w *= 800 / h; h = 800; }
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    
+    const base64Url = canvas.toDataURL('image/jpeg', 0.6);
+    
+    try {
+      $('text').innerText = 'Encrypting & Sending...';
+      const id = hex(crypto.getRandomValues(new Uint8Array(12)));
+      const data = await encrypt({ f: currentUser.uid, t: '📷 Image', url: base64Url });
+      ws.send(JSON.stringify({ type: 'msg', id, data, endpoint: pushSubscription ? pushSubscription.endpoint : null, uid: currentUser.uid, target_subs: currentFriendSubs }));
+      msgs.set(id, { ts: Date.now(), from: currentUser.uid, text: '📷 Image', url: base64Url });
+      render();
+      $('text').innerText = '';
+      $('send').disabled = false;
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+      $('text').innerText = '';
+      $('send').disabled = false;
+    }
+  }
+
+  $('image-upload').onchange = (e) => {
+    processAndSendImageFile(e.target.files[0]);
+    $('image-upload').value = '';
+  };
+  
+  $('text').addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (const item of items) {
+      if (item.type.indexOf('image') === 0) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        processAndSendImageFile(file);
+        break;
+      }
+    }
+  });
+
+  $('close-image-modal').onclick = () => {
+    $('image-modal').hidden = true;
+  };
+  
+  let currentModalMsgId = null;
+  window.openImage = (url, msgId) => {
+    $('modal-img').src = url;
+    currentModalMsgId = msgId;
+    
+    const dl = $('modal-download');
+    dl.href = url;
+    dl.download = 'PigeonChit_Image_' + Date.now() + '.jpg';
+    dl.textContent = 'Download Image';
+    $('image-modal').hidden = false;
+  };
+  
+  $('modal-delete').onclick = () => {
+    if (currentModalMsgId && ws && ws.readyState === 1) {
+      if (confirm('Delete this image for everyone?')) {
+        ws.send(JSON.stringify({ type: 'delete_msg', id: currentModalMsgId }));
+        $('image-modal').hidden = true;
+      }
+    }
+  };
   const enc = new TextEncoder(), dec = new TextDecoder();
   const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, '0')).join('');
   const toB64 = (u8) => btoa(String.fromCharCode(...u8));
@@ -501,7 +588,17 @@
         const line = document.createElement('div');
         const isMe = m.from !== currentFriendUid;
         line.className = isMe ? 'me' : 'them';
-        line.textContent = m.text;
+        
+        if (m.url) {
+          line.textContent = '';
+          const img = document.createElement('img');
+          img.src = m.url;
+          img.style.cssText = 'max-width:100%; max-height:250px; border-radius:8px; cursor:pointer; margin-bottom:4px; display:block; object-fit:contain; background:#f0f0f0;';
+          img.onclick = () => window.openImage(m.url, id);
+          line.appendChild(img);
+        } else {
+          line.textContent = m.text;
+        }
         
         const infoSpan = document.createElement('span');
         infoSpan.style.cssText = 'float:right; margin-left:12px; font-size:10px; color:#888; margin-top:2px; display:flex; align-items:center; gap:4px;';
@@ -535,7 +632,17 @@
         if (!renderedIds.has(id)) {
           const line = document.createElement('div');
           line.className = isMe ? 'me' : 'them';
-          line.textContent = m.text;
+          
+          if (m.url) {
+            line.textContent = '';
+            const img = document.createElement('img');
+            img.src = m.url;
+            img.style.cssText = 'max-width:100%; max-height:250px; border-radius:8px; cursor:pointer; margin-bottom:4px; display:block; object-fit:contain; background:#f0f0f0;';
+            img.onclick = () => window.openImage(m.url, id);
+            line.appendChild(img);
+          } else {
+            line.textContent = m.text;
+          }
           
           const infoSpan = document.createElement('span');
           infoSpan.style.cssText = 'float:right; margin-left:12px; font-size:10px; color:#888; margin-top:2px; display:flex; align-items:center; gap:4px;';
@@ -588,7 +695,7 @@
   async function addFromServer(m) {
     if (msgs.has(m.id)) { msgs.get(m.id).ts = m.ts; return; }
     const p = await decrypt(m.data);
-    msgs.set(m.id, { ts: m.ts, from: p ? p.f : '?', text: p ? p.t : '[could not decrypt]' });
+    msgs.set(m.id, { ts: m.ts, from: p ? p.f : '?', text: p ? p.t : '[could not decrypt]', url: p ? p.url : null });
   }
 
   function closeDel() {
@@ -662,6 +769,12 @@
         hideConfirm(); 
         $('status').textContent = 'Chat history deleted.'; 
       }
+      else if (msg.type === 'deleted_msg' && msg.id) {
+        msgs.delete(msg.id);
+        renderedIds.clear(); // Force re-render of all messages to remove it
+        $('log').textContent = '';
+        render(true);
+      }
     };
     ws.onclose = () => {
       $('send').disabled = true;
@@ -680,12 +793,12 @@
   }
 
   async function send() {
-    const text = $('text').value.trim();
+    const text = $('text').innerText.trim();
     if (!text || !ws || ws.readyState !== 1) return;
-    $('text').value = '';
+    $('text').innerText = '';
     const id = hex(crypto.getRandomValues(new Uint8Array(12)));
-    const data = await encrypt({ f: currentUser.uid, t: text }); // Use real Google ID
-    if (ws.readyState !== 1) { $('text').value = text; return; }
+    const data = await encrypt({ f: currentUser.uid, t: text }); 
+    if (ws.readyState !== 1) { $('text').innerText = text; return; }
     
     ws.send(JSON.stringify({ type: 'msg', id, data, endpoint: pushSubscription ? pushSubscription.endpoint : null, uid: currentUser.uid, target_subs: currentFriendSubs }));
     msgs.set(id, { ts: Date.now(), from: currentUser.uid, text });
@@ -694,7 +807,95 @@
   }
 
   $('send').onclick = send;
-  $('text').onkeydown = (e) => { if (e.key === 'Enter') send(); };
+  $('text').onkeydown = (e) => { 
+    if (e.key === 'Enter' && !e.shiftKey) { 
+      e.preventDefault(); 
+      send(); 
+    } 
+  };
+  
+  $('attach-btn').onclick = () => {
+    if(ws && ws.readyState === 1) $('image-upload').click();
+  };
+
+  async function processAndSendImageFile(file) {
+    if (!file) return;
+    
+    $('text').innerText = 'Compressing image...';
+    $('send').disabled = true;
+    
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    await new Promise(r => img.onload = r);
+    
+    const canvas = document.createElement('canvas');
+    let w = img.width, h = img.height;
+    if (w > 800) { h *= 800 / w; w = 800; }
+    if (h > 800) { w *= 800 / h; h = 800; }
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    
+    const base64Url = canvas.toDataURL('image/jpeg', 0.6);
+    
+    try {
+      $('text').innerText = 'Encrypting & Sending...';
+      const id = hex(crypto.getRandomValues(new Uint8Array(12)));
+      const data = await encrypt({ f: currentUser.uid, t: '📷 Image', url: base64Url });
+      ws.send(JSON.stringify({ type: 'msg', id, data, endpoint: pushSubscription ? pushSubscription.endpoint : null, uid: currentUser.uid, target_subs: currentFriendSubs }));
+      msgs.set(id, { ts: Date.now(), from: currentUser.uid, text: '📷 Image', url: base64Url });
+      render();
+      $('text').innerText = '';
+      $('send').disabled = false;
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+      $('text').innerText = '';
+      $('send').disabled = false;
+    }
+  }
+
+  $('image-upload').onchange = (e) => {
+    processAndSendImageFile(e.target.files[0]);
+    $('image-upload').value = '';
+  };
+  
+  $('text').addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (const item of items) {
+      if (item.type.indexOf('image') === 0) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        processAndSendImageFile(file);
+        break;
+      }
+    }
+  });
+
+  $('close-image-modal').onclick = () => {
+    $('image-modal').hidden = true;
+  };
+  
+  let currentModalMsgId = null;
+  window.openImage = (url, msgId) => {
+    $('modal-img').src = url;
+    currentModalMsgId = msgId;
+    
+    const dl = $('modal-download');
+    dl.href = url;
+    dl.download = 'PigeonChit_Image_' + Date.now() + '.jpg';
+    dl.textContent = 'Download Image';
+    $('image-modal').hidden = false;
+  };
+  
+  $('modal-delete').onclick = () => {
+    if (currentModalMsgId && ws && ws.readyState === 1) {
+      if (confirm('Delete this image for everyone?')) {
+        ws.send(JSON.stringify({ type: 'delete_msg', id: currentModalMsgId }));
+        $('image-modal').hidden = true;
+      }
+    }
+  };
+
   $('clear').onclick = () => {
     showConfirm("Delete History?", () => {
       if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'clear' }));

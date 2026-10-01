@@ -38,7 +38,7 @@ __name(getVapidAuthHeader, "getVapidAuthHeader");
 var index_default = {
   async fetch(request, env) {
     const origin = request.headers.get("Origin");
-    if (origin && !ALLOWED_ORIGINS.includes(origin) && !origin.startsWith("http://localhost") && !origin.startsWith("http://127.0.0.1")) {
+    if (origin && !ALLOWED_ORIGINS.includes(origin) && !origin.startsWith("http://localhost") && !origin.startsWith("http://127.0.0.1") && !origin.endsWith(".tap-the-ball.pages.dev")) {
       return new Response("Forbidden", { status: 403 });
     }
     if (request.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": origin || "*" } });
@@ -91,7 +91,7 @@ var Room = class extends DurableObject {
     ws.send(JSON.stringify({ type: "history", messages: rows, isPagination: !!before, reads }));
   }
   async webSocketMessage(ws, message) {
-    if (typeof message !== "string" || message.length > 2e4) return;
+    if (typeof message !== "string" || message.length > 200000) return;
     let msg;
     try {
       msg = JSON.parse(message);
@@ -136,9 +136,17 @@ var Room = class extends DurableObject {
       }
       return;
     }
+    if (msg.type === "delete_msg" && msg.id) {
+      this.sql.exec("DELETE FROM messages WHERE id = ?", msg.id);
+      const out = JSON.stringify({ type: "deleted_msg", id: msg.id });
+      for (const peer of this.ctx.getWebSockets()) {
+        try { peer.send(out); } catch {}
+      }
+      return;
+    }
     if (msg.type !== "msg") return;
     if (typeof msg.id !== "string" || msg.id.length > 64) return;
-    if (typeof msg.data !== "string" || msg.data.length > 8e3) return;
+    if (typeof msg.data !== "string" || msg.data.length > 150000) return;
     const ts = Date.now();
     this.sql.exec("INSERT OR IGNORE INTO messages (id, ts, data) VALUES (?, ?, ?)", msg.id, ts, msg.data);
     const out = JSON.stringify({ type: "msg", id: msg.id, ts, data: msg.data });
