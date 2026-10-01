@@ -181,7 +181,7 @@
   </div>
 
 <script type="module">
-
+  const $ = (id) => document.getElementById(id);
   const enc = new TextEncoder(), dec = new TextDecoder();
   const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, '0')).join('');
   const toB64 = (u8) => btoa(String.fromCharCode(...u8));
