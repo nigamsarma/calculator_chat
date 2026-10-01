@@ -791,15 +791,24 @@
     img.src = URL.createObjectURL(file);
     await new Promise(r => img.onload = r);
     
+    const isPng = file.type === 'image/png';
+    const maxSize = isPng ? 300 : 800;
+    const exportFormat = isPng ? 'image/png' : 'image/jpeg';
+    
     const canvas = document.createElement('canvas');
     let w = img.width, h = img.height;
-    if (w > 800) { h *= 800 / w; w = 800; }
-    if (h > 800) { w *= 800 / h; h = 800; }
+    if (w > maxSize) { h *= maxSize / w; w = maxSize; }
+    if (h > maxSize) { w *= maxSize / h; h = maxSize; }
     canvas.width = w; canvas.height = h;
+    
     const ctx = canvas.getContext('2d');
+    if (!isPng) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+    }
     ctx.drawImage(img, 0, 0, w, h);
     
-    const base64Url = canvas.toDataURL('image/webp', 0.6);
+    const base64Url = canvas.toDataURL(exportFormat, 0.6);
     
     try {
       $('text').innerText = 'Encrypting & Sending...';
