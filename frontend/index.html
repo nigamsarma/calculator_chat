@@ -792,7 +792,7 @@
     await new Promise(r => img.onload = r);
     
     const isPng = file.type === 'image/png';
-    const maxSize = isPng ? 300 : 800;
+    const maxSize = isPng ? 200 : 800;
     const exportFormat = isPng ? 'image/png' : 'image/jpeg';
     
     const canvas = document.createElement('canvas');
