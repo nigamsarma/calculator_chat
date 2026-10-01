@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="manifest" href="manifest.json">
+<title>Reaction Game</title>
+<style>
+  body, html {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #222; overflow: hidden;
+  }
+  
+  #game-container {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 100%; height: 100%; color: white; user-select: none;
+  }
+  #target {
+    width: 100px; height: 100px; background-color: #ff4757; border-radius: 50%;
+    cursor: pointer; box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4);
+    transition: transform 0.1s; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: bold; position: relative;
+  }
+  #target:active { transform: scale(0.9); }
+  #score-display { font-size: 24px; margin-bottom: 20px; font-weight: bold; }
+  
+  #chat-app {
+    display: none; flex-direction: column; width: 100%; height: 100%;
+    background-color: #e5ddd5; max-width: 600px; margin: 0 auto; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+  }
+  
+  .header {
+    background-color: #075e54; color: white; padding: 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 600; font-size: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); z-index: 10;
+  }
+  
+  #connect-screen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    flex: 1; padding: 20px; background-color: white;
+  }
+  #connect-screen input {
+    width: 100%; max-width: 300px; padding: 12px; margin-bottom: 16px;
+    border: 1px solid #ccc; border-radius: 8px; font-size: 16px; box-sizing: border-box;
+  }
+  #connect-screen button {
+    width: 100%; max-width: 300px; padding: 12px;
+    background-color: #25d366; color: white; border: none; border-radius: 8px;
+    font-size: 16px; font-weight: bold; cursor: pointer;
+  }
+  #status { margin-top: 16px; color: #666; font-size: 14px; text-align: center; }
+  
+  #chat-screen {
+    display: none; flex-direction: column; flex: 1; overflow: hidden;
+    background-image: url('https://www.transparenttextures.com/patterns/cubes.png');
+  }
+  
+  #log {
+    flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  }
+  
+  #log div {
+    max-width: 75%; padding: 10px 14px; border-radius: 16px; font-size: 15px;
+    word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative;
+  }
+  
+  #log .them { background-color: #ffffff; align-self: flex-start; border-top-left-radius: 4px; }
+  #log .me { background-color: #dcf8c6; align-self: flex-end; border-top-right-radius: 4px; }
+  
+  .input-area {
+    display: flex; padding: 10px; background-color: #f0f0f0; align-items: center; gap: 10px;
+  }
+  #text {
+    flex: 1; padding: 12px 16px; border: none; border-radius: 24px;
+    font-size: 15px; outline: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+  }
+  #send {
+    background-color: #075e54; color: white; border: none; border-radius: 50%;
+    width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-weight: bold; font-size: 14px;
+  }
+  #send:disabled { background-color: #aaa; }
+  
+  #settings-bar {
+    display: flex; justify-content: space-between; padding: 8px 16px; background: #eee;
+    font-size: 12px; align-items: center; border-bottom: 1px solid #ddd;
+  }
+  #clear {
+    background: none; border: none; color: #d32f2f; cursor: pointer; text-decoration: underline; font-size: 12px;
+  }
+  
+  #delbox {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .delbox-content {
+    background: white; padding: 20px; border-radius: 12px; text-align: center; width: 80%; max-width: 300px;
+  }
+  .delbox-content input {
+    width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;
+  }
+  .delbox-content button {
+    padding: 8px 16px; margin: 5px; border: none; border-radius: 6px; cursor: pointer;
+  }
+  #delok { background: #d32f2f; color: white; }
+  #delcancel { background: #ddd; color: black; }
+  #delmsg { color: #d32f2f; font-size: 12px; margin-top: 10px; }
+  
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  
+  <div id="game-container">
+    <div id="score-display">Score: <span id="score">0</span></div>
+    <div id="target">TAP</div>
+  </div>
+
+  <div id="chat-app">
+    <div class="header">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span id="back-btn" style="cursor:pointer; display:none; font-size:20px;">⬅️</span>
+        <span>Pigeon Chit</span>
+      </div>
+      <div id="close-chat" style="cursor:pointer; font-size:24px;" aria-label="Close Chat">&times;</div>
+    </div>
+    
+    <div id="connect-screen">
+      <button id="google-login" style="background:#db4437; color:white; width:100%; padding:12px; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Sign in with Google</button>
+      
+      <div id="friends-ui" style="display:none; width:100%; flex-direction:column; gap:16px; margin-top:10px;">
+        <div style="display:flex; justify-content:flex-end;">
+          <button id="logout-btn" style="background:transparent; color:#e74c3c; border:1px solid #e74c3c; padding:6px 12px; border-radius:12px; font-size:12px; cursor:pointer; font-weight:600; transition:all 0.2s;">Logout</button>
+        </div>
+        
+        <div style="display:flex; flex-direction:column; gap:8px; background:#f8f9fa; padding:16px; border-radius:12px; border:1px solid #eee; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+          <div style="font-size:14px; font-weight:600; color:#333; margin-bottom:4px;">Add New Friend</div>
+          <input id="friend-email" placeholder="Friend's email address" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box; font-size:14px; outline:none; transition:border 0.2s;">
+          <input id="friend-nickname" placeholder="Nickname (optional)" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box; font-size:14px; outline:none;">
+          <button id="add-friend-btn" style="width:100%; background:#25d366; color:white; border:none; padding:12px; border-radius:8px; cursor:pointer; font-weight:bold; font-size:14px; box-shadow:0 2px 4px rgba(37,211,102,0.2); margin-top:4px;">Add Friend</button>
+        </div>
+
+        <div id="friends-list" style="display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto; padding:4px 0;">
+        </div>
+      </div>
+
+      <button id="enable-push" style="margin-top:15px; background-color:#3498db; width:100%; padding:12px; border:none; border-radius:8px; color:white; font-weight:bold; display:none;">Enable Push</button>
+      <button id="setup-bio" style="margin-top: 15px; background: #6c5ce7; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; width: 100%;">🔒 Enable Face/Touch ID Lock</button>
+      <div id="status" style="margin-top:15px;">Please sign in to continue.</div>
+    </div>
+    
+    <div id="chat-screen">
+      <div id="settings-bar">
+        <span>Connected</span>
+        <button id="clear" disabled>Delete history</button>
+      </div>
+      <div id="log"></div>
+      <div class="input-area">
+        <input id="text" maxlength="1000" placeholder="Type a message" aria-label="Message">
+        <button id="send" disabled>Go</button>
+      </div>
+    </div>
+    
+    <div id="delbox" hidden>
+      <div class="delbox-content">
+        <h4 id="delbox-title">Confirm delete?</h4>
+        <button id="delcancel">Cancel</button>
+        <button id="delok">Delete</button>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  const $ = (id) => document.getElementById(id);
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const toB64 = (u8) => btoa(String.fromCharCode(...u8));
+  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { initializeFirestore, doc, setDoc, getDocs, collection, query, where, onSnapshot, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDyzdmHDeE2aRgQ9pXuzbqc7twHugtYBYQ",
+    authDomain: "tap-the-ball-d9212.firebaseapp.com",
+    projectId: "tap-the-ball-d9212",
+    storageBucket: "tap-the-ball-d9212.firebasestorage.app",
+    messagingSenderId: "348390029199",
+    appId: "1:348390029199:web:4f2348a57a2f3ed9f2bdfa"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = initializeFirestore(app, {
+    experimentalForceLongPolling: true
+  });
+  const auth = getAuth(app);
+
+  let confirmCallback = null;
+  function showConfirm(title, callback) {
+    $('delbox-title').textContent = title;
+    confirmCallback = callback;
+    $('delbox').hidden = false;
+  }
+  function hideConfirm() {
+    $('delbox').hidden = true;
+    confirmCallback = null;
+  }
+  $('delcancel').onclick = hideConfirm;
+  $('delok').onclick = () => {
+    if (confirmCallback) confirmCallback();
+    hideConfirm();
+  };
+  
+  let currentUser = null;
+  let friendsUnsub = null;
+
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      currentUser = user;
+      $('google-login').style.display = 'none';
+      $('friends-ui').style.display = 'flex';
+      $('status').textContent = 'Logged in!';
+      
+      await setDoc(doc(db, "users", user.uid), {
+        email: user.email,
+        uid: user.uid
+      });
+
+      if (friendsUnsub) friendsUnsub();
+      friendsUnsub = onSnapshot(collection(db, "friends", user.uid, "my_friends"), (snap) => {
+        const fl = $('friends-list');
+        fl.innerHTML = '';
+        snap.forEach(d => {
+          const f = d.data();
+          if (f.status === 'hidden') return;
+          const wrap = document.createElement('div');
+          wrap.style.cssText = "display:flex; gap:8px; align-items:center; margin-bottom:8px;";
+          
+          const btn = document.createElement('button');
+          let text = (f.nickname || f.email);
+          if (f.status === 'deleted') text += " (They deleted you)";
+          btn.textContent = text;
+          
+          if (f.status === 'deleted') {
+            btn.style.cssText = "flex:1; padding:12px 16px; background:#fff3cd; color:#856404; border:none; border-radius:10px; cursor:pointer; text-align:left; font-style:italic; font-weight:500; font-size:14px; box-shadow:0 2px 4px rgba(0,0,0,0.05); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;";
+          } else {
+            btn.style.cssText = "flex:1; padding:12px 16px; background:#e8f5e9; color:#2e7d32; border:1px solid #c8e6c9; border-radius:10px; cursor:pointer; text-align:left; font-weight:600; font-size:14px; box-shadow:0 2px 4px rgba(0,0,0,0.05); transition:transform 0.1s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;";
+          }
+          
+          btn.onclick = () => connectToFriend(f.uid, f.nickname || f.email);
+          
+          const editBtn = document.createElement('button');
+          editBtn.textContent = "✏️";
+          editBtn.style.cssText = "width:42px; height:42px; display:flex; align-items:center; justify-content:center; background:#fef0d9; border:1px solid #fde0b2; border-radius:10px; cursor:pointer; font-size:16px; box-shadow:0 2px 4px rgba(243,156,18,0.05); flex-shrink:0;";
+          editBtn.onclick = async () => {
+            const newName = prompt("Enter new nickname for " + f.email + ":", f.nickname || "");
+            if (newName !== null) {
+              await updateDoc(doc(db, "friends", user.uid, "my_friends", f.uid), { nickname: newName.trim() || f.email });
+            }
+          };
+          
+          const delBtn = document.createElement('button');
+          delBtn.textContent = "❌";
+          delBtn.style.cssText = "width:42px; height:42px; display:flex; align-items:center; justify-content:center; background:#fee2e2; border:1px solid #fca5a5; border-radius:10px; cursor:pointer; font-size:16px; box-shadow:0 2px 4px rgba(255,71,87,0.05); flex-shrink:0;";
+          delBtn.onclick = () => {
+            showConfirm("Delete " + (f.nickname || f.email) + "?", async () => {
+              if (f.status === 'deleted') {
+                await deleteDoc(doc(db, "friends", user.uid, "my_friends", f.uid));
+                await deleteDoc(doc(db, "friends", f.uid, "my_friends", user.uid));
+              } else {
+                await updateDoc(doc(db, "friends", user.uid, "my_friends", f.uid), { status: 'hidden' });
+                try {
+                  await updateDoc(doc(db, "friends", f.uid, "my_friends", user.uid), { status: 'deleted' });
+                } catch(e) {}
+              }
+            });
+          };
+
+          wrap.appendChild(btn);
+          wrap.appendChild(editBtn);
+          wrap.appendChild(delBtn);
+          fl.appendChild(wrap);
+        });
+      });
+    } else {
+      currentUser = null;
+      if (friendsUnsub) { friendsUnsub(); friendsUnsub = null; }
+      $('google-login').style.display = 'block';
+      $('friends-ui').style.display = 'none';
+      $('status').textContent = 'Please sign in to continue.';
+    }
+  });
+
+  $('google-login').onclick = () => {
+    signInWithPopup(auth, new GoogleAuthProvider()).catch(e => alert(e.message));
+  };
+
+  $('logout-btn').onclick = () => {
+    signOut(auth);
+  };
+
+  $('add-friend-btn').onclick = async () => {
+    const email = $('friend-email').value.trim();
+    const nickname = $('friend-nickname').value.trim();
+    if (!email) return;
+    
+    $('status').textContent = 'Finding friend...';
+    
+    try {
+      const q = query(collection(db, "users"), where("email", "==", email));
+      
+      // Force a 5-second timeout on the search
+      const snaps = await Promise.race([
+        getDocs(q),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout while searching for user. Network is blocking Firebase.")), 5000))
+      ]);
+      
+      if (snaps.empty) {
+        $('status').textContent = 'User not found.';
+        return;
+      }
+      
+      const friend = snaps.docs[0].data();
+      
+      const myData = { email: friend.email, uid: friend.uid, status: 'active' };
+      if (nickname) myData.nickname = nickname;
+      
+      $('status').textContent = 'User found! Saving connection...';
+      
+      // Force a 5-second timeout on the database writes
+      await Promise.race([
+        Promise.all([
+          setDoc(doc(db, "friends", currentUser.uid, "my_friends", friend.uid), myData, { merge: true }),
+          setDoc(doc(db, "friends", friend.uid, "my_friends", currentUser.uid), {
+            email: currentUser.email, uid: currentUser.uid, status: 'active'
+          }, { merge: true })
+        ]),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout while saving friend. Network or Security Rules blocking write.")), 5000))
+      ]);
+      
+      $('friend-email').value = '';
+      $('friend-nickname').value = '';
+      $('status').textContent = 'Friend added!';
+    } catch (error) {
+      $('status').textContent = 'Error: ' + error.message;
+    }
+  };
+
+  let currentFriendUid = null;
+
+  let currentFriendSubs = [];
+  async function connectToFriend(friendUid, friendEmail) {
+    currentFriendUid = friendUid;
+    $('connect-screen').style.display = 'none';
+    $('chat-screen').style.display = 'flex';
+    $('back-btn').style.display = 'block';
+    
+    const sortedUids = [currentUser.uid, friendUid].sort();
+    const sharedSecret = sortedUids[0] + "_" + sortedUids[1];
+    $('status').textContent = 'Connecting to ' + friendEmail + '...';
+    
+    try {
+      const snap = await getDoc(doc(db, "users", friendUid));
+      if (snap.exists() && snap.data().push_subs) {
+        currentFriendSubs = Object.values(snap.data().push_subs).map(s => JSON.parse(s));
+      } else {
+        currentFriendSubs = [];
+      }
+    } catch (e) {}
+    
+    await new Promise(r => setTimeout(r, 10));
+    await connect(sharedSecret);
+  }
+
+  let ws, keys, retry = 0, timer, opened = false, current = '';
+  const RELAY = 'wss://relay.snigamanandhasarma.workers.dev';
+
+  const msgs = new Map();
+  let reads = {};
+
+  const publicVapidKey = 'BKfRU96rWmoC8gMrRfqaKHkxlotuDtV0sHL6-cXFznMzAtFIILA2mcEqdrD6bJ4b6oOFrPHBvs4qCkTEV2HHruA';
+  let pushSubscription = null;
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+    return outputArray;
+  }
+
+  async function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      try { return await navigator.serviceWorker.register('sw.js'); } 
+      catch (e) { console.error('SW error'); }
+    }
+  }
+  
+  async function saveSubscriptionToFirebase() {
+    if (!pushSubscription || !currentUser) return;
+    try {
+      const endpointHash = btoa(pushSubscription.endpoint).replace(/[/+=]/g, '');
+      await setDoc(doc(db, "users", currentUser.uid), {
+        push_subs: {
+          [endpointHash]: JSON.stringify(pushSubscription)
+        }
+      }, { merge: true });
+    } catch (e) {}
+  }
+
+  async function subscribeToPush() {
+    const register = await navigator.serviceWorker.ready;
+    try {
+      pushSubscription = await register.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+      });
+      saveSubscriptionToFirebase();
+      if (ws && ws.readyState === 1) sendSubscription();
+    } catch(e) {}
+  }
+
+  $('enable-push').onclick = async () => {
+    const status = await Notification.requestPermission();
+    if (status === 'granted') {
+      await subscribeToPush();
+      $('enable-push').style.display = 'none';
+    }
+  };
+
+  registerServiceWorker().then(async (reg) => {
+    if (reg) {
+      pushSubscription = await reg.pushManager.getSubscription();
+      if (!pushSubscription && Notification.permission !== 'denied') {
+        $('enable-push').style.display = 'block';
+      } else if (pushSubscription) {
+        saveSubscriptionToFirebase();
+        if (ws && ws.readyState === 1) sendSubscription();
+      }
+    }
+  });
+
+  function sendSubscription() {
+    if (pushSubscription && ws.readyState === 1 && currentUser) {
+      ws.send(JSON.stringify({ type: 'subscribe', sub: pushSubscription, uid: currentUser.uid }));
+    }
+  }
+  
+  function markAsRead(maxTs) {
+    if (ws && ws.readyState === 1 && currentUser) {
+      ws.send(JSON.stringify({ type: 'read', uid: currentUser.uid, maxTs }));
+    }
+  }
+
+  async function deriveKeys(pass) {
+    const base = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveBits']);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: enc.encode('chat-v2'), iterations: 10000, hash: 'SHA-256' }, base, 512));
+    const token = hex(bits.slice(32));
+    const room = hex(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode('room:' + token)))).slice(0, 32);
+    return {
+      aes: await crypto.subtle.importKey('raw', bits.slice(0, 32), 'AES-GCM', false, ['encrypt', 'decrypt']),
+      token, room,
+    };
+  }
+
+  async function encrypt(obj) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, keys.aes, enc.encode(JSON.stringify(obj))));
+    const out = new Uint8Array(12 + ct.length);
+    out.set(iv);
+    out.set(ct, 12);
+    return toB64(out);
+  }
+
+  async function decrypt(b64) {
+    try {
+      const raw = fromB64(b64);
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, keys.aes, raw.slice(12));
+      return JSON.parse(dec.decode(pt));
+    } catch { return null; }
+  }
+
+  const renderedIds = new Set();
+  let isLoadingHistory = false;
+  let hasMoreHistory = true;
+
+  function render(prepend = false) {
+    const log = $('log');
+    const oldScrollHeight = log.scrollHeight;
+    
+    const sorted = [...msgs.entries()].sort((a, b) => a[1].ts - b[1].ts);
+    const friendLastReadTs = reads[currentFriendUid] || 0;
+    
+    if (prepend) {
+      log.textContent = '';
+      renderedIds.clear();
+      for (const [id, m] of sorted) {
+        const line = document.createElement('div');
+        const isMe = m.from !== currentFriendUid;
+        line.className = isMe ? 'me' : 'them';
+        line.textContent = m.text;
+        
+        const infoSpan = document.createElement('span');
+        infoSpan.style.cssText = 'float:right; margin-left:12px; font-size:10px; color:#888; margin-top:2px; display:flex; align-items:center; gap:4px;';
+        
+        const timeSpan = document.createElement('span');
+        timeSpan.textContent = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        infoSpan.appendChild(timeSpan);
+        
+        if (isMe) {
+          const ticks = document.createElement('span');
+          ticks.className = 'ticks';
+          ticks.style.fontSize = '12px';
+          ticks.style.letterSpacing = '-2px';
+          const isRead = m.ts <= friendLastReadTs;
+          ticks.textContent = isRead ? '✓✓' : '✓';
+          ticks.style.color = isRead ? '#4fc3f7' : '#999';
+          infoSpan.appendChild(ticks);
+        }
+        
+        line.appendChild(infoSpan);
+        log.append(line);
+        renderedIds.add(id);
+      }
+      if (oldScrollHeight > 0) log.scrollTop = log.scrollHeight - oldScrollHeight;
+    } else {
+      const children = Array.from(log.children);
+      let childIndex = 0;
+      
+      for (const [id, m] of sorted) {
+        const isMe = m.from !== currentFriendUid;
+        if (!renderedIds.has(id)) {
+          const line = document.createElement('div');
+          line.className = isMe ? 'me' : 'them';
+          line.textContent = m.text;
+          
+          const infoSpan = document.createElement('span');
+          infoSpan.style.cssText = 'float:right; margin-left:12px; font-size:10px; color:#888; margin-top:2px; display:flex; align-items:center; gap:4px;';
+          
+          const timeSpan = document.createElement('span');
+          timeSpan.textContent = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          infoSpan.appendChild(timeSpan);
+          
+          if (isMe) {
+            const ticks = document.createElement('span');
+            ticks.className = 'ticks';
+            ticks.style.fontSize = '12px';
+            ticks.style.letterSpacing = '-2px';
+            const isRead = m.ts <= friendLastReadTs;
+            ticks.textContent = isRead ? '✓✓' : '✓';
+            ticks.style.color = isRead ? '#4fc3f7' : '#999';
+            infoSpan.appendChild(ticks);
+          }
+          
+          line.appendChild(infoSpan);
+          log.append(line);
+          renderedIds.add(id);
+        } else {
+          if (isMe && childIndex < children.length) {
+            const line = children[childIndex];
+            const ticks = line.querySelector('.ticks');
+            if (ticks) {
+              const isRead = m.ts <= friendLastReadTs;
+              ticks.textContent = isRead ? '✓✓' : '✓';
+              ticks.style.color = isRead ? '#4fc3f7' : '#999';
+            }
+          }
+          childIndex++;
+        }
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+  
+  $('log').onscroll = () => {
+    if ($('log').scrollTop === 0 && !isLoadingHistory && hasMoreHistory && ws && ws.readyState === 1) {
+      const sorted = [...msgs.values()].sort((a, b) => a.ts - b.ts);
+      if (sorted.length > 0) {
+        isLoadingHistory = true;
+        ws.send(JSON.stringify({ type: 'sync', before: sorted[0].ts }));
+      }
+    }
+  };
+
+  async function addFromServer(m) {
+    if (msgs.has(m.id)) { msgs.get(m.id).ts = m.ts; return; }
+    const p = await decrypt(m.data);
+    msgs.set(m.id, { ts: m.ts, from: p ? p.f : '?', text: p ? p.t : '[could not decrypt]' });
+  }
+
+  function closeDel() {
+    $('delbox').hidden = true;
+    $('delpass').value = '';
+    $('delmsg').textContent = '';
+  }
+
+  async function connect(sharedSecret) {
+    clearTimeout(timer);
+    if (ws) { ws.onclose = null; ws.close(); }
+    if (!sharedSecret) return;
+
+    $('status').textContent = 'Connecting…';
+    if (sharedSecret !== current || !keys) {
+      keys = null; msgs.clear(); render(true); current = sharedSecret;
+      keys = await deriveKeys(sharedSecret);
+    }
+
+    opened = false;
+    ws = new WebSocket(RELAY + '/room/' + keys.room + '?t=' + keys.token);
+    ws.onopen = () => {
+      opened = true; retry = 0;
+      $('status').textContent = 'Connected.';
+      $('send').disabled = false;
+      $('clear').disabled = false;
+      ws.send(JSON.stringify({ type: 'sync' }));
+      sendSubscription();
+    };
+    ws.onmessage = async (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      
+      if (msg.type === 'history') {
+        if (msg.messages.length < 50) hasMoreHistory = false;
+        if (!msg.isPagination) {
+          msgs.clear();
+          renderedIds.clear();
+          $('log').textContent = '';
+          hasMoreHistory = true;
+          reads = msg.reads || {};
+        }
+        await Promise.all(msg.messages.map(addFromServer));
+        
+        // Auto-mark newest message as read
+        const sorted = [...msgs.values()].sort((a, b) => a.ts - b.ts);
+        if (sorted.length > 0 && sorted[sorted.length - 1].from === currentFriendUid && document.visibilityState === 'visible') {
+          markAsRead(sorted[sorted.length - 1].ts);
+        }
+        
+        render(msg.isPagination);
+        isLoadingHistory = false;
+      }
+      else if (msg.type === 'read') {
+        reads[msg.uid] = Math.max(reads[msg.uid] || 0, msg.maxTs);
+        render(); // This will trigger the ticks update
+      }
+      else if (msg.type === 'msg') { 
+        await addFromServer(msg); 
+        const mObj = msgs.get(msg.id);
+        if (mObj && mObj.from === currentFriendUid && document.visibilityState === 'visible') {
+          markAsRead(mObj.ts);
+        }
+        render(); 
+      }
+      else if (msg.type === 'cleared') { 
+        msgs.clear(); 
+        renderedIds.clear();
+        $('log').textContent = '';
+        render(true); 
+        hideConfirm(); 
+        $('status').textContent = 'Chat history deleted.'; 
+      }
+    };
+    ws.onclose = () => {
+      $('send').disabled = true;
+      $('clear').disabled = true;
+      hideConfirm();
+      const wait = Math.min(1000 * 2 ** retry++, 15000);
+      $('status').textContent = (opened ? 'Disconnected.' : 'Could not connect.') +
+        ' Retrying in ' + wait / 1000 + 's…';
+      timer = setTimeout(() => connect(sharedSecret), wait);
+      
+      $('connect-screen').style.display = 'flex';
+      $('chat-screen').style.display = 'none';
+      $('back-btn').style.display = 'none';
+    };
+    ws.onerror = () => ws.close();
+  }
+
+  async function send() {
+    const text = $('text').value.trim();
+    if (!text || !ws || ws.readyState !== 1) return;
+    $('text').value = '';
+    const id = hex(crypto.getRandomValues(new Uint8Array(12)));
+    const data = await encrypt({ f: currentUser.uid, t: text }); // Use real Google ID
+    if (ws.readyState !== 1) { $('text').value = text; return; }
+    
+    ws.send(JSON.stringify({ type: 'msg', id, data, endpoint: pushSubscription ? pushSubscription.endpoint : null, uid: currentUser.uid, target_subs: currentFriendSubs }));
+    msgs.set(id, { ts: Date.now(), from: currentUser.uid, text });
+    render();
+    $('text').focus();
+  }
+
+  $('send').onclick = send;
+  $('text').onkeydown = (e) => { if (e.key === 'Enter') send(); };
+  $('clear').onclick = () => {
+    showConfirm("Delete History?", () => {
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'clear' }));
+    });
+  };
+  $('back-btn').onclick = () => {
+    if (ws) { ws.onclose = null; ws.close(); ws = null; }
+    clearTimeout(timer);
+    $('connect-screen').style.display = 'flex';
+    $('chat-screen').style.display = 'none';
+    $('back-btn').style.display = 'none';
+  };
+
+  document.addEventListener("visibilitychange", () => {
+    if (ws && ws.readyState === 1 && currentUser) {
+      const isVisible = document.visibilityState === 'visible';
+      ws.send(JSON.stringify({ type: 'status', visible: isVisible }));
+      if (isVisible && currentFriendUid) {
+        const sorted = [...msgs.values()].sort((a, b) => a.ts - b.ts);
+        if (sorted.length > 0 && sorted[sorted.length - 1].from === currentFriendUid) {
+          markAsRead(sorted[sorted.length - 1].ts);
+        }
+      }
+    }
+  });
+
+
+  let score = 0;
+  const target = document.getElementById('target');
+  const scoreEl = document.getElementById('score');
+  
+  target.addEventListener('click', (e) => {
+    e.stopPropagation();
+    score++;
+    scoreEl.innerText = score;
+    const maxX = window.innerWidth - 120;
+    const maxY = window.innerHeight - 200;
+    const x = Math.max(0, Math.floor(Math.random() * maxX));
+    const y = Math.max(0, Math.floor(Math.random() * maxY));
+    target.style.transform = `translate(${x - window.innerWidth/2 + 60}px, ${y - window.innerHeight/2 + 100}px)`;
+  });
+
+  let clickCount = 0;
+  let clickTimer = null;
+  
+  document.addEventListener('click', (e) => {
+    if (e.target.id === 'target') return; 
+    if (document.getElementById('chat-app').style.display === 'flex') return;
+    
+    clickCount++;
+    if (clickCount === 3) {
+      clickCount = 0;
+      attemptUnlock(); 
+    }
+    
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => {
+      clickCount = 0;
+    }, 1000);
+  });
+
+  async function attemptUnlock() {
+    const savedCred = localStorage.getItem('biometric-id');
+    if (savedCred) {
+      try {
+        const challenge = new Uint8Array(32);
+        crypto.getRandomValues(challenge);
+        await navigator.credentials.get({
+          publicKey: {
+            challenge: challenge,
+            allowCredentials: [{
+              id: Uint8Array.from(atob(savedCred), c => c.charCodeAt(0)),
+              type: 'public-key'
+            }],
+            userVerification: 'required'
+          }
+        });
+        openChat(); 
+      } catch (e) {
+        console.log('Biometric failed or canceled');
+      }
+    } else {
+      openChat(); 
+    }
+  }
+
+  function openChat() {
+    document.getElementById('game-container').style.display = 'none';
+    document.getElementById('chat-app').style.display = 'flex';
+  }
+
+  document.getElementById('close-chat').addEventListener('click', () => {
+    document.getElementById('game-container').style.display = 'flex';
+    document.getElementById('chat-app').style.display = 'none';
+  });
+
+  const bioBtn = document.getElementById('setup-bio');
+  if (localStorage.getItem('biometric-id')) {
+    bioBtn.style.display = 'none'; 
+  }
+  bioBtn.onclick = async () => {
+    try {
+      const challenge = new Uint8Array(32);
+      const userId = new Uint8Array(16);
+      crypto.getRandomValues(challenge);
+      crypto.getRandomValues(userId);
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge: challenge,
+          rp: { name: "Reaction Game" },
+          user: { id: userId, name: "admin", displayName: "Admin" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+          authenticatorSelection: { userVerification: "required" },
+          timeout: 60000
+        }
+      });
+      const credId = btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
+      localStorage.setItem('biometric-id', credId);
+      alert('Success! The app is now strictly locked to your biometrics.');
+      bioBtn.style.display = 'none';
+    } catch (e) {
+      alert('Failed to setup biometrics: ' + e.message);
+    }
+  };
+</script>
+</body>
+</html>
