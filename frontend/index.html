@@ -792,23 +792,47 @@
     await new Promise(r => img.onload = r);
     
     const isPng = file.type === 'image/png';
-    const maxSize = isPng ? 200 : 800;
+    let currentMaxSize = isPng ? 300 : 800; // Start at 300 for PNGs, loop will shrink if needed
     const exportFormat = isPng ? 'image/png' : 'image/jpeg';
+    let quality = 0.8;
     
     const canvas = document.createElement('canvas');
-    let w = img.width, h = img.height;
-    if (w > maxSize) { h *= maxSize / w; w = maxSize; }
-    if (h > maxSize) { w *= maxSize / h; h = maxSize; }
-    canvas.width = w; canvas.height = h;
-    
     const ctx = canvas.getContext('2d');
-    if (!isPng) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, w, h);
+    let base64Url = '';
+    const MAX_B64_LENGTH = 120000; // Safely below the 150,000 backend limit
+
+    while (true) {
+      let w = img.width, h = img.height;
+      if (w > currentMaxSize) { h *= currentMaxSize / w; w = currentMaxSize; }
+      if (h > currentMaxSize) { w *= currentMaxSize / h; h = currentMaxSize; }
+      
+      canvas.width = w; 
+      canvas.height = h;
+      
+      if (!isPng) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+      } else {
+        ctx.clearRect(0, 0, w, h);
+      }
+      ctx.drawImage(img, 0, 0, w, h);
+      
+      base64Url = canvas.toDataURL(exportFormat, quality);
+      
+      if (base64Url.length <= MAX_B64_LENGTH) break; // It fits!
+      
+      if (isPng) {
+        currentMaxSize *= 0.8; // Shrink PNG dimensions by 20%
+        if (currentMaxSize < 50) break; // Safety exit
+      } else {
+        if (quality > 0.2) {
+          quality -= 0.15; // Drop JPEG quality
+        } else {
+          currentMaxSize *= 0.7; // Quality is low, start shrinking physical dimensions
+          if (currentMaxSize < 100) break; // Safety exit
+        }
+      }
     }
-    ctx.drawImage(img, 0, 0, w, h);
-    
-    const base64Url = canvas.toDataURL(exportFormat, 0.6);
     
     try {
       $('text').innerText = 'Encrypting & Sending...';
