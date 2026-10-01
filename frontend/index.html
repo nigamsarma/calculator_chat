@@ -753,6 +753,37 @@
   async function processAndSendImageFile(file) {
     if (!file) return;
     
+    if (file.type === 'image/gif') {
+      if (file.size > 130 * 1024) {
+        alert('GIF file size is too big (limit 130KB). Please select a smaller one.');
+        return;
+      }
+      $('text').innerText = 'Reading GIF...';
+      $('send').disabled = true;
+      
+      const base64Url = await new Promise(r => {
+        const reader = new FileReader();
+        reader.onload = e => r(e.target.result);
+        reader.readAsDataURL(file);
+      });
+      
+      try {
+        $('text').innerText = 'Encrypting & Sending...';
+        const id = hex(crypto.getRandomValues(new Uint8Array(12)));
+        const data = await encrypt({ f: currentUser.uid, t: '📷 GIF', url: base64Url });
+        ws.send(JSON.stringify({ type: 'msg', id, data, endpoint: pushSubscription ? pushSubscription.endpoint : null, uid: currentUser.uid, target_subs: currentFriendSubs }));
+        msgs.set(id, { ts: Date.now(), from: currentUser.uid, text: '📷 GIF', url: base64Url });
+        render();
+        $('text').innerText = '';
+        $('send').disabled = false;
+      } catch (err) {
+        alert('Upload failed: ' + err.message);
+        $('text').innerText = '';
+        $('send').disabled = false;
+      }
+      return;
+    }
+    
     $('text').innerText = 'Compressing image...';
     $('send').disabled = true;
     
